@@ -1,6 +1,7 @@
 import numpy as np
 from pyscf import gto, scf
 import argparse
+import os
 
 # Utilities
 from slowquant.molecularintegrals.integralfunctions import one_electron_integral_transform, two_electron_integral_transform
@@ -37,6 +38,10 @@ AS = args.AS  # active space (nEL, nMO)
 adapt_thr = args.adapt_thr
 opt_thr = args.opt_thr
 max_iter = args.opt_max_iter
+
+# Getting path to current and parent folder
+parent_folder = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
+results_folder = os.path.join(parent_folder, "rotoadapt_analysis")
  
 ## DEFINE MOLECULE IN PYSCF
 
@@ -138,5 +143,5 @@ output = {'molecule': molecule,
           'num_measures': num_measures
           }
 
-with open(f'gen-{molecule}-{nEL}_{nMO}-stretch-RS.pkl', 'wb') as f:
+with open(os.path.join(results_folder, f'gen-{molecule}-{nEL}_{nMO}-stretch-RS.pkl'), 'wb') as f:
     pickle.dump(output, f)
