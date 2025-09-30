@@ -25,7 +25,7 @@ parser = argparse.ArgumentParser(description="rodoadapt script - returns energy 
 # Add arguments
 parser.add_argument("--mol", type=str, required = True, help="Molecule (H2O, LiH)")
 parser.add_argument("--AS", type=int, nargs=2, required = True, help="Active space nEL nMO")
-parser.add_argument("--adapt_thr", type=float, default=1e-6, help="adapt layer threshold")
+parser.add_argument("--adapt_thr", type=float, default=5e-6, help="adapt layer threshold")
 parser.add_argument("--opt_thr", type=float, default=1e-5, help="adapt optimization threshold")
 parser.add_argument("--opt_max_iter", type=float, default=20, help="max number of optimization cycles")
 
@@ -42,9 +42,12 @@ max_iter = args.opt_max_iter
 
 if molecule == 'H2O':
     geometry = 'O 0.000000 0.000000 0.000000; H 0.960000 0.000000 0.000000; H -0.240365 0.929422 0.000000' #H2O equilibrium
+    # geometry = 'O 0.000000  0.000000  0.000000; H  1.000000  0.000000  0.000000; H -0.250380  0.968150  0.000000' #H2O stretched    
 
 if molecule == 'LiH':
-    geometry = 'H 0.000000 0.000000 0.000000; Li 1.595000 0.00000 0.000000' #LiH equilibrium
+    # geometry = 'H 0.000000 0.000000 0.000000; Li 1.595000 0.00000 0.000000' #LiH equilibrium
+    geometry = 'H 0.000000 0.000000 0.000000; Li 3.0000 0.00000 0.000000' #LiH stretched
+
 
 mol_obj = gto.Mole()
 mol_obj.build(atom = geometry, basis = 'sto-3g')
@@ -101,13 +104,15 @@ pool_data = {
 
 num_inactive_so = WF.num_inactive_spin_orbs # use it to rescale operator indeces to the active space
 
-#Generate indeces for singly-excited operators
+## EXCITATION WITH RESPECT TO REFERENCE
+
+## Generate indeces for singly-excited operators
 for a, i in iterate_t1(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
     pool_data["excitation indeces"].append((i, a))            
     pool_data["excitation type"].append("single")
     pool_data["excitation operator"].append(G1(i, a, True))
 
-#Generate indeces for doubly-excited operators
+## Generate indeces for doubly-excited operators
 for a, i, b, j in iterate_t2(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
     pool_data["excitation indeces"].append((i, j, a, b))
     pool_data["excitation type"].append("double")
@@ -115,7 +120,9 @@ for a, i, b, j in iterate_t2(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
 
 ## CALCULATE ROTOADAPT
 
-WF, en_traj, num_measures = rotoadapt_utils.rotoadapt(WF, H, pool_data, max_iter, adapt_thr, opt_thr)
+# WF, en_traj, num_measures = rotoadapt_utils.rotoselect_opt(WF, H, pool_data, adapt_thr)
+WF, en_traj, num_measures = rotoadapt_utils.rotoselect(WF, H, pool_data, adapt_thr)
+# WF, en_traj, num_measures = rotoadapt_utils.rotoadapt(WF, H, pool_data, max_iter, adapt_thr, opt_thr)
 
 ## SAVING RELEVANT OBJECTS
 
@@ -131,5 +138,5 @@ output = {'molecule': molecule,
           'num_measures': num_measures
           }
 
-with open(f'{molecule}-{nEL}_{nMO}.pkl', 'wb') as f:
+with open(f'gen-{molecule}-{nEL}_{nMO}-stretch-RS.pkl', 'wb') as f:
     pickle.dump(output, f)
