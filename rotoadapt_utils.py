@@ -343,8 +343,6 @@ def rotoselect(WF, H, pool_data, adapt_threshold = 1e-5):
     E_prev_adapt = float(expectation_value(WF.ci_coeffs, [H], WF.ci_coeffs, WF.ci_info, WF.thetas, WF.ups_layout))
     en_traj = [E_prev_adapt]
 
-    num_measures = 0
-
     converged = False
 
     while converged == False:
@@ -352,10 +350,11 @@ def rotoselect(WF, H, pool_data, adapt_threshold = 1e-5):
         # Looping through pool operator -> get the best ansatz
         results = pool_parallel(WF, H, pool_data)
         theta_pool, energy_pool = zip(*results)
+
         op_index = np.argmin(energy_pool)
 
-        # Update number of measurements
-        num_measures += 5*len(excitation_pool)
+        # Adding number of evaluation of pool
+        WF.num_energy_evals += 4*len(pool_data["excitation indeces"])
 
         print('OPERATOR->', op_index)
         print(f'Theta {theta_pool[op_index]} - Energy {energy_pool[op_index]} - previous {E_prev_adapt}')
@@ -388,7 +387,7 @@ def rotoselect(WF, H, pool_data, adapt_threshold = 1e-5):
             print(f'RESULT at layer {WF.ups_layout.n_params} - Energy: {energy_pool[op_index]} - Previous: {E_prev_adapt} - Delta: {deltaE_adapt} - Theta: {theta_pool[op_index]}')
             E_prev_adapt = float(energy_pool[op_index])
 
-    return WF, en_traj, num_measures
+    return WF, en_traj
 
 def rotoselect_opt(WF, H, pool_data, adapt_threshold = 1e-5):
     '''
@@ -415,8 +414,6 @@ def rotoselect_opt(WF, H, pool_data, adapt_threshold = 1e-5):
     E_prev_adapt = float(expectation_value(WF.ci_coeffs, [H], WF.ci_coeffs, WF.ci_info, WF.thetas, WF.ups_layout))
     en_traj = [E_prev_adapt]
 
-    num_measures = 0
-
     converged = False
 
     while converged == False:
@@ -426,8 +423,8 @@ def rotoselect_opt(WF, H, pool_data, adapt_threshold = 1e-5):
         theta_pool, energy_pool = zip(*results)
         op_index = np.argmin(energy_pool)
 
-        # Update number of measurements
-        num_measures += 5*len(excitation_pool)
+        # Adding number of evaluation of pool
+        WF.num_energy_evals += 4*len(pool_data["excitation indeces"])
 
         print('OPERATOR->', op_index)
         print(f'Theta {theta_pool[op_index]} - Energy {energy_pool[op_index]} - previous {E_prev_adapt}')
@@ -465,4 +462,4 @@ def rotoselect_opt(WF, H, pool_data, adapt_threshold = 1e-5):
             E_prev_adapt = float(WF.energy_elec)
 
 
-    return WF, en_traj, num_measures
+    return WF, en_traj

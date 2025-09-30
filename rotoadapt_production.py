@@ -125,11 +125,13 @@ for a, i, b, j in iterate_t2(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
 
 ## CALCULATE ROTOADAPT
 
-# WF, en_traj, num_measures = rotoadapt_utils.rotoselect_opt(WF, H, pool_data, adapt_thr)
-WF, en_traj, num_measures = rotoadapt_utils.rotoselect(WF, H, pool_data, adapt_thr)
-# WF, en_traj, num_measures = rotoadapt_utils.rotoadapt(WF, H, pool_data, max_iter, adapt_thr, opt_thr)
+# Add Rotomeasurements
 
-## SAVING RELEVANT OBJECTS
+WF, en_traj = rotoadapt_utils.rotoselect_opt(WF, H, pool_data, adapt_thr)
+# WF, en_traj = rotoadapt_utils.rotoselect(WF, H, pool_data, adapt_thr)
+# WF, en_traj = rotoadapt_utils.rotoadapt(WF, H, pool_data, max_iter, adapt_thr, opt_thr)
+
+# SAVING RELEVANT OBJECTS
 
 import pickle
 
@@ -140,8 +142,11 @@ output = {'molecule': molecule,
           'ci_ref': cas_obj.e_tot-mol_obj.enuc, 
           'en_traj': np.array(en_traj), 
           'WF': WF,
-          'num_measures': num_measures
+          'num_measures': WF.num_energy_evals
           }
 
-with open(os.path.join(results_folder, f'gen-{molecule}-{nEL}_{nMO}-stretch-RS.pkl'), 'wb') as f:
+with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT.pkl'), 'wb') as f:
     pickle.dump(output, f)
+
+# with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS.pkl'), 'wb') as f:
+#     pickle.dump(output, f)

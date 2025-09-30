@@ -2,6 +2,7 @@ import numpy as np
 from pyscf import gto, scf
 import matplotlib.pyplot as plt
 import argparse
+import os
 
 # Utilities
 from slowquant.molecularintegrals.integralfunctions import one_electron_integral_transform, two_electron_integral_transform
@@ -14,7 +15,6 @@ from slowquant.unitary_coupled_cluster.operator_state_algebra import propagate_s
 
 # Wave function ansatz - unitary product state
 from slowquant.unitary_coupled_cluster.ups_wavefunction import WaveFunctionUPS
-
 
 ## INPUT VARIABLES
 
@@ -36,6 +36,10 @@ AS = args.AS  # active space (nEL, nMO)
 adapt_thr = args.adapt_thr
 opt_thr = args.opt_thr
 max_iter = args.opt_max_iter
+
+# Getting path to current and parent folder
+parent_folder = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
+results_folder = os.path.join(parent_folder, "rotoadapt_analysis")
  
 ## DEFINE MOLECULE IN PYSCF
 
@@ -148,6 +152,9 @@ def do_adapt(WF, maxiter=1000, epoch=1e-6 , orbital_opt: bool = False):
             gr -= expectation_value(H_ket, [T], WF.ci_coeffs,
                                 WF.ci_info, WF.thetas, WF.ups_layout)
             grad.append(gr)
+
+            # Counting number of evaluations
+            WF.num_energy_evals += 2
             
         print()
         print("------GP Printing Grad and Excitation Pool")
@@ -197,8 +204,8 @@ def do_adapt(WF, maxiter=1000, epoch=1e-6 , orbital_opt: bool = False):
         # np.append(WF._thetas, 0.0)
 
         # VQE optimization
-        WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=False)
-        # WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=True)
+        # WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=False)
+        WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=True)
 
 
 
@@ -236,11 +243,8 @@ output = {'molecule': molecule,
           'ci_ref': cas_obj.e_tot-mol_obj.enuc, 
           'en_traj': np.array(en_traj), 
           'WF': WF,
-          'num_measures': 0
+          'num_measures': WF.num_energy_evals
           }
 
-with open(f'{molecule}-{nEL}_{nMO}-stretch-GR.pkl', 'wb') as f:
+with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR_last_opt.pkl'), 'wb') as f:
     pickle.dump(output, f)
-
-# with open(f'{molecule}-{nEL}_{nMO}-stretch-GR_last_opt.pkl', 'wb') as f:
-#     pickle.dump(output, f)
