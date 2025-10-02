@@ -41,13 +41,13 @@ max_iter = args.opt_max_iter
 
 # Getting path to current and parent folder
 parent_folder = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
-results_folder = os.path.join(parent_folder, "rotoadapt_analysis")
- 
+results_folder = os.path.join(parent_folder, "rotoadapt/rotoadapt_analysis")
+
 ## DEFINE MOLECULE IN PYSCF
 
 if molecule == 'H2O':
     # geometry = 'O 0.000000 0.000000 0.000000; H 0.960000 0.000000 0.000000; H -0.240365 0.929422 0.000000' #H2O equilibrium
-    geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA) 
+    geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA)
 
 if molecule == 'LiH':
     # geometry = 'H 0.000000 0.000000 0.000000; Li 1.595000 0.00000 0.000000' #LiH equilibrium
@@ -91,9 +91,12 @@ WF = WaveFunctionUPS(
         hf_obj.mo_coeff,
         h_ao,
         g_ao,
-        "adapt",
+        "fuccsd",
         include_active_kappa=True,
     )
+
+# Add energy evaluation counter attribute
+WF.num_energy_evals = 0
 
 # Define Hamiltonian
 H = hamiltonian_0i_0a(
@@ -117,7 +120,7 @@ num_inactive_so = WF.num_inactive_spin_orbs # use it to rescale operator indeces
 
 ## Generate indeces for singly-excited operators
 for a, i in iterate_t1(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
-    pool_data["excitation indeces"].append((i, a))            
+    pool_data["excitation indeces"].append((i, a))
     pool_data["excitation type"].append("single")
     pool_data["excitation operator"].append(G1(i, a, True))
 
@@ -138,18 +141,30 @@ WF, en_traj = rotoadapt_utils.rotoselect(WF, H, pool_data, cas_en)  # rotoselect
 
 import pickle
 
+# Create pickleable WF object representation
+wf_data = {
+    'num_params': WF.ups_layout.n_params,
+    'excitation_indices': [idx.tolist() if hasattr(idx, 'tolist') else idx for idx in WF.ups_layout.excitation_indices],
+    'excitation_types': WF.ups_layout.excitation_operator_type,
+    'thetas': WF.thetas.copy(),
+    'final_energy': WF.energy_elec
+}
+
 output = {'molecule': molecule,
           'num_metadata': {'adapt_thr': adapt_thr, 
                            'opt_thr': opt_thr, 
                            'opt_max_iter': max_iter},
           'ci_ref': cas_obj.e_tot-mol_obj.enuc, # CASCI reference energy
           'en_traj': np.array(en_traj), # array of electronic energie shape=(#layers)
-          'WF': WF, # SlowQuant WF object
+          'wf_data': wf_data, # Essential WF information instead of full object
           'num_measures': WF.num_energy_evals
           }
 
 # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT.pkl'), 'wb') as f:
 #     pickle.dump(output, f)
+
+# Create results directory if it doesn't exist
+os.makedirs(results_folder, exist_ok=True)
 
 with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS.pkl'), 'wb') as f:
     pickle.dump(output, f)

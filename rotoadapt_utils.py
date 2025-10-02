@@ -1,6 +1,5 @@
 import numpy as np
 import copy
-import multiprocessing as mp
 import os
 import itertools
 
@@ -99,6 +98,7 @@ def pool_evaluator(WF, pool_index, H, pool_data):
     '''
     Extends ansatz with candidate unitary from pool
     Finds global minimum using companion matrix method
+    Uses temporary modification to avoid deep copy issues
     
     Arguments
         WF: WF object from SlowQuant from previous iteration
@@ -113,28 +113,41 @@ def pool_evaluator(WF, pool_index, H, pool_data):
     excitation_pool = pool_data["excitation indeces"]
     excitation_pool_type = pool_data["excitation type"]
 
-    # getting a copy of WF and adding one unitary to its layout
-    pool_WF = copy.deepcopy(WF)
-    pool_WF.ups_layout.excitation_indices.append(np.array(excitation_pool[pool_index])-pool_WF.num_inactive_spin_orbs)
-    pool_WF.ups_layout.excitation_operator_type.append(excitation_pool_type[pool_index])
-    pool_WF.ups_layout.n_params += 1
-    pool_WF._thetas.append(0.0)
-    pool_WF.ci_coeffs = construct_ups_state(pool_WF.ci_coeffs, pool_WF.ci_info, pool_WF.thetas, pool_WF.ups_layout)
+    # Store original state to restore later
+    original_excitation_indices = WF.ups_layout.excitation_indices.copy()
+    original_excitation_types = WF.ups_layout.excitation_operator_type.copy()
+    original_n_params = WF.ups_layout.n_params
+    original_thetas = WF._thetas.copy()
+    original_ci_coeffs = WF.ci_coeffs.copy()
 
-    # global minimum with companion matrix method --> TO DO: parallelize
+    # Temporarily add one unitary to the layout
+    WF.ups_layout.excitation_indices.append(np.array(excitation_pool[pool_index])-WF.num_inactive_spin_orbs)
+    WF.ups_layout.excitation_operator_type.append(excitation_pool_type[pool_index])
+    WF.ups_layout.n_params += 1
+    WF._thetas.append(0.0)
+    WF.ci_coeffs = construct_ups_state(WF.ci_coeffs, WF.ci_info, WF.thetas, WF.ups_layout)
 
+    # Evaluate energy landscape at different theta values
     energies = []
     thetas = []
 
     for l in range(0,5):
-        current_thetas = pool_WF.thetas
+        current_thetas = WF.thetas.copy()
         current_thetas[-1] += (2*np.pi*l)/5.5
         thetas.append(current_thetas[-1])
-        pool_WF.thetas = current_thetas
-        energies.append(float(expectation_value(pool_WF.ci_coeffs, [H], pool_WF.ci_coeffs, pool_WF.ci_info, pool_WF.thetas, pool_WF.ups_layout)))
+        
+        # Temporarily set the theta
+        WF.thetas = current_thetas
+        energies.append(float(expectation_value(WF.ci_coeffs, [H], WF.ci_coeffs, WF.ci_info, WF.thetas, WF.ups_layout)))
 
-    # global minimum with companion matrix method --> TO DO: parallelize
+    # Restore original state
+    WF.ups_layout.excitation_indices = original_excitation_indices
+    WF.ups_layout.excitation_operator_type = original_excitation_types
+    WF.ups_layout.n_params = original_n_params
+    WF._thetas = original_thetas
+    WF.ci_coeffs = original_ci_coeffs
 
+    # Find global minimum using companion matrix method
     Thetas = np.array(thetas)
     Energies = np.array(energies)
 
@@ -145,7 +158,7 @@ def pool_evaluator(WF, pool_index, H, pool_data):
 
 def pool_parallel(WF, H, pool_data):
     '''
-    Parallelizes energy estimations over the pool
+    Evaluates energy estimates over the pool (sequential version to avoid pickle issues)
 
     Arguments
         WF: WF object from SlowQuant from previous iteration
@@ -158,10 +171,11 @@ def pool_parallel(WF, H, pool_data):
     excitation_pool = pool_data["excitation indeces"]
     pool_idx_array = np.arange(len(excitation_pool))
 
-    # mp.set_start_method("spawn", force=True)
-
-    with mp.Pool(processes=os.cpu_count()) as pool:
-        results = pool.starmap(pool_evaluator, [(WF, pool_index, H, pool_data) for pool_index in pool_idx_array])
+    # Sequential evaluation to avoid multiprocessing pickle issues
+    results = []
+    for pool_index in pool_idx_array:
+        result = pool_evaluator(WF, pool_index, H, pool_data)
+        results.append(result)
 
     return results
 
@@ -184,7 +198,7 @@ def measure_energy_theta(WF, H, thetas_list):
 
 def measurement_parallel_opt(WF, H, d):
     '''
-    Parallelizes energy measurements for global minimum search
+    Performs energy measurements for global minimum search (sequential version to avoid pickle issues)
 
     Arguments
         WF: WF object from SlowQuant from previous iteration
@@ -199,8 +213,11 @@ def measurement_parallel_opt(WF, H, d):
     thetas_scan = [current_thetas[:d] + [current_thetas[d] + (2*np.pi*l)/5.5] + current_thetas[d+1:] for l in range(1,5)]
     thetas = [current_thetas[d] + (2*np.pi*l)/5.5 for l in range(1,5)]
 
-    with mp.Pool(processes=os.cpu_count()) as pool:
-            energies = pool.starmap(measure_energy_theta, [(WF, H, thetas_scan[i]) for i in range(0, len(thetas_scan))])
+    # Sequential evaluation to avoid multiprocessing pickle issues
+    energies = []
+    for i in range(len(thetas_scan)):
+        energy = measure_energy_theta(WF, H, thetas_scan[i])
+        energies.append(energy)
     
     return thetas, energies
 

@@ -40,12 +40,12 @@ max_iter = args.opt_max_iter
 # Getting path to current and parent folder
 parent_folder = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
 results_folder = os.path.join(parent_folder, "rotoadapt_analysis")
- 
+
 ## DEFINE MOLECULE IN PYSCF
 
 if molecule == 'H2O':
     # geometry = 'O 0.000000 0.000000 0.000000; H 0.960000 0.000000 0.000000; H -0.240365 0.929422 0.000000' #H2O equilibrium
-    geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA) 
+    geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA)
 
 if molecule == 'LiH':
     # geometry = 'H 0.000000 0.000000 0.000000; Li 1.595000 0.00000 0.000000' #LiH equilibrium
@@ -87,15 +87,18 @@ WF = WaveFunctionUPS(
         hf_obj.mo_coeff,
         h_ao,
         g_ao,
-        "adapt",
+        "fuccsd",
         include_active_kappa=True,
     )
+
+# Add energy evaluation counter attribute
+WF.num_energy_evals = 0
 
 en_traj = [hf_obj.energy_tot()-mol_obj.enuc]
 
 def do_adapt(WF, maxiter=1000, epoch=1e-6 , orbital_opt: bool = False):
     '''Run Adapt VQE algorithm
-    
+
     args:
         maxiter: max number of VQE iteration
         epoch: gradient variation threshold
@@ -103,13 +106,13 @@ def do_adapt(WF, maxiter=1000, epoch=1e-6 , orbital_opt: bool = False):
     '''
 
     #DEFINE EXCITATION POOL: tuples contain indeces of occupied and unoccupied SOs characterizing excitations
-    excitation_pool: list[tuple[int, ...]] = [] 
+    excitation_pool: list[tuple[int, ...]] = []
     excitation_pool_type: list[str] = []
 
     #Generate indeces for singly-excited operators
     for a, i in iterate_t1(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
     #for a, i in iterate_t1_sa(self.active_occ_spin_idx, self.active_unocc_spin_idx):
-        excitation_pool.append((int(i),int(a)))            
+        excitation_pool.append((int(i),int(a)))
         excitation_pool_type.append("single")
 
     #Generate indeces for doubly-excited operators
@@ -118,7 +121,7 @@ def do_adapt(WF, maxiter=1000, epoch=1e-6 , orbital_opt: bool = False):
         excitation_pool_type.append("double")
     #print(self.ups_layout.excitation_indices)
     #print(self.ups_layout.excitation_operator_type)
-    
+
     print('POOL DATA', len(excitation_pool))
 
     nloop = 0
@@ -138,20 +141,20 @@ def do_adapt(WF, maxiter=1000, epoch=1e-6 , orbital_opt: bool = False):
         H_ket = propagate_state([Hamiltonian], WF.ci_coeffs, WF.ci_info, WF.thetas, WF.ups_layout)
 
         grad = []
-        
+
         #GRADIENTS
         for i in range(len(excitation_pool_type)):
 
             #Looping through operators in the pool -> calculate gradient on the fly
             if excitation_pool_type[i] == "single":
-                (i, a) = np.array(excitation_pool[i]) 
+                (i, a) = np.array(excitation_pool[i])
                 T = G1(i, a, True)
             elif excitation_pool_type[i] == "double":
-                (i, j, a, b) = np.array(excitation_pool[i]) 
+                (i, j, a, b) = np.array(excitation_pool[i])
                 T = G2(i, j, a, b, True)
             else:
                 raise ValueError(f"Got unknown excitation type {excitation_pool[i]}")
-            
+
             #Calculate gradient, i.e. commutator -> expectation value function input (bra, operator, ket (here Hket))
             gr = expectation_value(WF.ci_coeffs, [T], H_ket,
                                 WF.ci_info, WF.thetas, WF.ups_layout)
@@ -161,7 +164,7 @@ def do_adapt(WF, maxiter=1000, epoch=1e-6 , orbital_opt: bool = False):
 
             # Counting number of evaluations
             WF.num_energy_evals += 2
-            
+
         print()
         print("------GP Printing Grad and Excitation Pool")
         print("------GP #################################")
@@ -175,7 +178,7 @@ def do_adapt(WF, maxiter=1000, epoch=1e-6 , orbital_opt: bool = False):
                 f"------GP{str("Grad").center(27)} | {str("Excitation Pool indices").center(18)} | {str("Excitation Pool type").center(27)}"
             )
         for i in range(len(grad)):
-            
+
             print(
                 f"------GP{str(grad[i]).center(27)} | {str(excitation_pool[i]).center(18)} | {excitation_pool_type[i].center(27)}"
             )
@@ -202,9 +205,9 @@ def do_adapt(WF, maxiter=1000, epoch=1e-6 , orbital_opt: bool = False):
         WF.ups_layout.n_params += 1
 
         # reset excitation pool (always the same)
-        excitation_pool = excitation_pool 
+        excitation_pool = excitation_pool
         excitation_pool_type = excitation_pool_type
-        
+
         # add theta parameter for new operator
         WF._thetas.append(0.0)
         # np.append(WF._thetas, 0.0)
@@ -229,12 +232,12 @@ def do_adapt(WF, maxiter=1000, epoch=1e-6 , orbital_opt: bool = False):
             print()
             print("------TP Printing the Optimised Theta")
             print("------TP ############################")
-            
+
             print(
                     f"------TP {str("Thetas").center(27)} | {str("UPS Layout indices").center(18)} | {str("Excitation indices").center(18)} | {str("UPS Layout type").center(27)}"
             )
         # for i in range(len(self._thetas)):
-            
+
             # print(
                 # f"------TP {str(self._thetas[i]).center(27)} | {str(self.ups_layout.excitation_indices[i]).center(18)} |{str(self.ups_layout.excitation_indices[i] + self.num_inactive_spin_orbs ).center(18)} | {self.ups_layout.excitation_operator_type[i].center(27)}"
             # )
@@ -252,11 +255,11 @@ WF, en_traj = do_adapt(WF, epoch=epoch_ca)
 import pickle
 
 output = {'molecule': molecule,
-          'num_metadata': {'adapt_thr': 1e-6, 
-                           'opt_thr': 0, 
+          'num_metadata': {'adapt_thr': 1e-6,
+                           'opt_thr': 0,
                            'opt_max_iter': 1000},
-          'ci_ref': cas_obj.e_tot-mol_obj.enuc, 
-          'en_traj': np.array(en_traj), 
+          'ci_ref': cas_obj.e_tot-mol_obj.enuc,
+          'en_traj': np.array(en_traj),
           'WF': WF,
           'num_measures': WF.num_energy_evals
           }
