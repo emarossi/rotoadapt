@@ -156,10 +156,20 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
         grad = []
 
         #GRADIENTS
-        # grad = adapt_utils.gradient_parallel(WF, H_ket, pool_data)
-        for T in pool_data["excitation operator"]:
+        for i in range(len(excitation_pool_type)):
 
-            gr = expectation_value(WF.ci_coeffs,[T],  H_ket,
+            #Looping through operators in the pool -> calculate gradient on the fly
+            if excitation_pool_type[i] == "single":
+                (i, a) = np.array(excitation_pool[i])
+                T = G1(i, a, True)
+            elif excitation_pool_type[i] == "double":
+                (i, j, a, b) = np.array(excitation_pool[i])
+                T = G2(i, j, a, b, True)
+            else:
+                raise ValueError(f"Got unknown excitation type {excitation_pool[i]}")
+
+            #Calculate gradient, i.e. commutator -> expectation value function input (bra, operator, ket (here Hket))
+            gr = expectation_value(WF.ci_coeffs, [T], H_ket,
                                 WF.ci_info, WF.thetas, WF.ups_layout)
             gr -= expectation_value(H_ket,[T],  WF.ci_coeffs,
                                 WF.ci_info, WF.thetas, WF.ups_layout)
@@ -265,9 +275,12 @@ epoch_ca = 1.6e-3
 WF, en_traj, rdm1_traj = do_adapt(WF, epoch=epoch_ca, maxiter=30)
 
 output = {'molecule': molecule,
-          'ci_ref': cas_obj.e_tot-mol_obj.enuc, # CASCI reference energy
-          'en_traj': np.array(en_traj), # array of electronic energie shape=(#layers)
-          'rdm1_traj': rdm1_traj, # rdm1 over the whole trajectory WF object
+          'num_metadata': {'adapt_thr': 1e-6,
+                           'opt_thr': 0,
+                           'opt_max_iter': 1000},
+          'ci_ref': cas_obj.e_tot-mol_obj.enuc,
+          'en_traj': np.array(en_traj),
+          'WF': WF,
           'num_measures': WF.num_energy_evals
           }
 
