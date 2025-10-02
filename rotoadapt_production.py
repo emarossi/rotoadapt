@@ -46,13 +46,15 @@ results_folder = os.path.join(parent_folder, "rotoadapt_analysis")
 ## DEFINE MOLECULE IN PYSCF
 
 if molecule == 'H2O':
-    geometry = 'O 0.000000 0.000000 0.000000; H 0.960000 0.000000 0.000000; H -0.240365 0.929422 0.000000' #H2O equilibrium
-    # geometry = 'O 0.000000  0.000000  0.000000; H  1.000000  0.000000  0.000000; H -0.250380  0.968150  0.000000' #H2O stretched    
+    # geometry = 'O 0.000000 0.000000 0.000000; H 0.960000 0.000000 0.000000; H -0.240365 0.929422 0.000000' #H2O equilibrium
+    geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA) 
 
 if molecule == 'LiH':
     # geometry = 'H 0.000000 0.000000 0.000000; Li 1.595000 0.00000 0.000000' #LiH equilibrium
     geometry = 'H 0.000000 0.000000 0.000000; Li 3.0000 0.00000 0.000000' #LiH stretched
 
+if molecule == 'N2':
+    geometry = 'N 0.000000 0.000000 0.000000; N 2.0980 0.00000 0.000000' #N2 stretched
 
 mol_obj = gto.Mole()
 mol_obj.build(atom = geometry, basis = 'sto-3g')
@@ -67,7 +69,9 @@ cas_obj = hf_obj.CASCI(nMO, nEL)
 # cas_obj.max_cycle_macro = 100
 cas_obj.kernel()
 
-print(f'Energy HF: {hf_obj.energy_tot()-mol_obj.enuc}, Energy CAS: {cas_obj.e_tot-mol_obj.enuc}')
+cas_en = cas_obj.e_tot-mol_obj.enuc
+
+print(f'Energy HF: {hf_obj.energy_tot()-mol_obj.enuc}, Energy CAS: {cas_en}')
 
 # Getting integrals in MO basis
 
@@ -109,7 +113,7 @@ pool_data = {
 
 num_inactive_so = WF.num_inactive_spin_orbs # use it to rescale operator indeces to the active space
 
-## EXCITATION WITH RESPECT TO REFERENCE
+## EXCITATION WITH RESPECT TO HF REFERENCE
 
 ## Generate indeces for singly-excited operators
 for a, i in iterate_t1(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
@@ -127,9 +131,8 @@ for a, i, b, j in iterate_t2(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
 
 # Add Rotomeasurements
 
-WF, en_traj = rotoadapt_utils.rotoselect_opt(WF, H, pool_data, adapt_thr)
-# WF, en_traj = rotoadapt_utils.rotoselect(WF, H, pool_data, adapt_thr)
-# WF, en_traj = rotoadapt_utils.rotoadapt(WF, H, pool_data, max_iter, adapt_thr, opt_thr)
+# WF, en_traj = rotoadapt_utils.rotoselect_opt(WF, H, pool_data, cas_en)    # rotoselect + full VQE optimzation
+WF, en_traj = rotoadapt_utils.rotoselect(WF, H, pool_data, cas_en)  # rotoselect - no optimization
 
 # SAVING RELEVANT OBJECTS
 
@@ -145,8 +148,8 @@ output = {'molecule': molecule,
           'num_measures': WF.num_energy_evals
           }
 
-with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT.pkl'), 'wb') as f:
-    pickle.dump(output, f)
-
-# with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS.pkl'), 'wb') as f:
+# with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT.pkl'), 'wb') as f:
 #     pickle.dump(output, f)
+
+with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS.pkl'), 'wb') as f:
+    pickle.dump(output, f)

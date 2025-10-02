@@ -44,11 +44,15 @@ results_folder = os.path.join(parent_folder, "rotoadapt_analysis")
 ## DEFINE MOLECULE IN PYSCF
 
 if molecule == 'H2O':
-    geometry = 'O 0.000000 0.000000 0.000000; H 0.960000 0.000000 0.000000; H -0.240365 0.929422 0.000000' #H2O equilibrium
+    # geometry = 'O 0.000000 0.000000 0.000000; H 0.960000 0.000000 0.000000; H -0.240365 0.929422 0.000000' #H2O equilibrium
+    geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA) 
 
 if molecule == 'LiH':
     # geometry = 'H 0.000000 0.000000 0.000000; Li 1.595000 0.00000 0.000000' #LiH equilibrium
     geometry = 'H 0.000000 0.000000 0.000000; Li 3.0000 0.00000 0.000000' #LiH stretched
+
+if molecule == 'N2':
+    geometry = 'N 0.000000 0.000000 0.000000; N 2.0980 0.00000 0.000000' #N2 stretched
 
 
 mol_obj = gto.Mole()
@@ -64,7 +68,9 @@ cas_obj = hf_obj.CASCI(nMO, nEL)
 # cas_obj.max_cycle_macro = 100
 cas_obj.kernel()
 
-print(f'Energy HF: {hf_obj.energy_tot()-mol_obj.enuc}, Energy CAS: {cas_obj.e_tot-mol_obj.enuc}')
+cas_en = cas_obj.e_tot-mol_obj.enuc
+
+print(f'Energy HF: {hf_obj.energy_tot()-mol_obj.enuc}, Energy CAS: {cas_en}')
 
 # Getting integrals in MO basis
 
@@ -204,23 +210,28 @@ def do_adapt(WF, maxiter=1000, epoch=1e-6 , orbital_opt: bool = False):
         # np.append(WF._thetas, 0.0)
 
         # VQE optimization
-        # WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=False)
-        WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=True)
+        WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=False)  # full VQE optimization
+        # WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=True)    # Optimize only last unitary
 
+        deltaE_adapt = np.abs(cas_en-WF.energy_elec)
 
+        if deltaE_adapt < epoch:
+            en_traj.append(WF.energy_elec)
+            print(f'FINAL RESULT - Energy: {WF.energy_elec} - Delta: {deltaE_adapt}')
+            break
 
+        else:
+            en_traj.append(WF.energy_elec)
+            print('#########CI COEFFS########')
+            print(WF.ci_coeffs)
+            print('#########################')
 
-        en_traj.append(WF.energy_elec)
-        print('#########CI COEFFS########')
-        print(WF.ci_coeffs)
-        print('#########################')
-
-        print()
-        print("------TP Printing the Optimised Theta")
-        print("------TP ############################")
-        
-        print(
-                f"------TP {str("Thetas").center(27)} | {str("UPS Layout indices").center(18)} | {str("Excitation indices").center(18)} | {str("UPS Layout type").center(27)}"
+            print()
+            print("------TP Printing the Optimised Theta")
+            print("------TP ############################")
+            
+            print(
+                    f"------TP {str("Thetas").center(27)} | {str("UPS Layout indices").center(18)} | {str("Excitation indices").center(18)} | {str("UPS Layout type").center(27)}"
             )
         # for i in range(len(self._thetas)):
             
@@ -232,7 +243,11 @@ def do_adapt(WF, maxiter=1000, epoch=1e-6 , orbital_opt: bool = False):
 
     return WF, en_traj
 
-WF, en_traj = do_adapt(WF, epoch=adapt_thr)
+# Define epoch for chemical accuracy
+
+epoch_ca = 1.6e-3
+
+WF, en_traj = do_adapt(WF, epoch=epoch_ca)
 
 import pickle
 
@@ -246,5 +261,10 @@ output = {'molecule': molecule,
           'num_measures': WF.num_energy_evals
           }
 
-with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR_last_opt.pkl'), 'wb') as f:
+## OUTPUT ONLY LAST OPTIMIZATION
+# with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR_last_opt.pkl'), 'wb') as f:
+#     pickle.dump(output, f)
+
+## OUTPUT FULL VQE
+with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR.pkl'), 'wb') as f:
     pickle.dump(output, f)

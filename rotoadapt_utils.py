@@ -318,18 +318,17 @@ def rotoadapt(WF, H, pool_data, max_epochs = 20, adapt_threshold = 1e-5, opt_thr
 
     return WF, en_traj, num_measures
 
-def rotoselect(WF, H, pool_data, adapt_threshold = 1e-5):
+def rotoselect(WF, H, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_threshold for chemical accuracy
     '''
     Constructs ADAPT ansatz using Rotoselect algorithm
-    No reoptimization of parameters afterwards 
+    No parameter optimization after selection
 
     Arguments
         WF: wave function object from SlowQuant
         H: Hamiltonian operator from SlowQuant
         pool_data: dictionary with the data about the operator pool
-        max_epochs: max number of theta optimization cycles
-        adapt_threshold: min energy reduction upon addition of new layer
-        opt_threshold: min energy reduction upon theta optimization
+        cas_en: CASSCF reference energy (used to estimate chemical accuracy)
+        adapt_threshold: min energy reduction upon addition of new layer (optional, default is chemical accuracy)
 
     Returns
         WF: final wave function object from SlowQuant
@@ -359,9 +358,10 @@ def rotoselect(WF, H, pool_data, adapt_threshold = 1e-5):
         print('OPERATOR->', op_index)
         print(f'Theta {theta_pool[op_index]} - Energy {energy_pool[op_index]} - previous {E_prev_adapt}')
 
-        deltaE_adapt = np.abs(energy_pool[op_index]-E_prev_adapt)
+        # deltaE_adapt = np.abs(energy_pool[op_index]-E_prev_adapt) # with respect to previous layer
+        deltaE_adapt = np.abs(cas_en-energy_pool[op_index]) # for chemical accuracy threshold
 
-        if deltaE_adapt <= adapt_threshold:
+        if deltaE_adapt < adapt_threshold:
             WF.ups_layout.excitation_indices.append(np.array(excitation_pool[op_index])-WF.num_inactive_spin_orbs)
             WF.ups_layout.excitation_operator_type.append(excitation_pool_type[op_index])
             WF.ups_layout.n_params += 1
@@ -371,7 +371,6 @@ def rotoselect(WF, H, pool_data, adapt_threshold = 1e-5):
             en_traj.append(float(energy_pool[op_index]))
             print(f'FINAL RESULT - Energy: {energy_pool[op_index]} - Previous: {E_prev_adapt} - Delta: {deltaE_adapt} - Theta: {theta_pool[op_index]}')
             converged = True
-            break
 
         else:
             # Updating WF with new operator
@@ -385,22 +384,21 @@ def rotoselect(WF, H, pool_data, adapt_threshold = 1e-5):
 
             
             print(f'RESULT at layer {WF.ups_layout.n_params} - Energy: {energy_pool[op_index]} - Previous: {E_prev_adapt} - Delta: {deltaE_adapt} - Theta: {theta_pool[op_index]}')
-            E_prev_adapt = float(energy_pool[op_index])
+            E_prev_adapt = float(energy_pool[op_index])  # with respect to previous layer
 
     return WF, en_traj
 
-def rotoselect_opt(WF, H, pool_data, adapt_threshold = 1e-5):
+def rotoselect_opt(WF, H, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_threshold for chemical accuracy
     '''
     Constructs ADAPT ansatz using Rotoselect algorithm
-    No reoptimization of parameters afterwards 
+    Full VQE optimization after selection
 
     Arguments
         WF: wave function object from SlowQuant
         H: Hamiltonian operator from SlowQuant
         pool_data: dictionary with the data about the operator pool
-        max_epochs: max number of theta optimization cycles
-        adapt_threshold: min energy reduction upon addition of new layer
-        opt_threshold: min energy reduction upon theta optimization
+        cas_en: CASSCF reference energy (used to estimate chemical accuracy)
+        adapt_threshold: min energy reduction upon addition of new layer (optional, default is chemical accuracy)
 
     Returns
         WF: final wave function object from SlowQuant
@@ -429,9 +427,10 @@ def rotoselect_opt(WF, H, pool_data, adapt_threshold = 1e-5):
         print('OPERATOR->', op_index)
         print(f'Theta {theta_pool[op_index]} - Energy {energy_pool[op_index]} - previous {E_prev_adapt}')
 
-        deltaE_adapt = np.abs(energy_pool[op_index]-E_prev_adapt)
+        # deltaE_adapt = np.abs(energy_pool[op_index]-E_prev_adapt)  # with respect to previous layer
+        deltaE_adapt = np.abs(cas_en-energy_pool[op_index])  # for chemical accuracy
 
-        if deltaE_adapt <= adapt_threshold:
+        if deltaE_adapt < adapt_threshold:
             WF.ups_layout.excitation_indices.append(np.array(excitation_pool[op_index])-WF.num_inactive_spin_orbs)
             WF.ups_layout.excitation_operator_type.append(excitation_pool_type[op_index])
             WF.ups_layout.n_params += 1
@@ -441,7 +440,6 @@ def rotoselect_opt(WF, H, pool_data, adapt_threshold = 1e-5):
             en_traj.append(float(energy_pool[op_index]))
             print(f'FINAL RESULT - Energy: {energy_pool[op_index]} - Previous: {E_prev_adapt} - Delta: {deltaE_adapt} - Theta: {theta_pool[op_index]}')
             converged = True
-            break
 
         else:
             # Updating WF with new operator
@@ -456,10 +454,15 @@ def rotoselect_opt(WF, H, pool_data, adapt_threshold = 1e-5):
   
             # Appending energy and next layer
             en_traj.append(WF.energy_elec)
-
             
-            print(f'RESULT at layer {WF.ups_layout.n_params} - Energy: {WF.energy_elec} - Previous: {E_prev_adapt} - Delta: {deltaE_adapt} - Theta: {theta_pool[op_index]}')
             E_prev_adapt = float(WF.energy_elec)
+
+            if np.abs(cas_en-E_prev_adapt) < adapt_threshold:
+                print(f'FINAL RESULT - Energy: {energy_pool[op_index]} - Previous: {E_prev_adapt} - Delta: {deltaE_adapt} - Theta: {theta_pool[op_index]}')
+                converged = True
+
+            else:
+                print(f'RESULT at layer {WF.ups_layout.n_params} - Energy: {WF.energy_elec} - Previous: {E_prev_adapt} - Delta: {deltaE_adapt} - Theta: {theta_pool[op_index]}')
 
 
     return WF, en_traj
