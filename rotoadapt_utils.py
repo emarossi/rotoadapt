@@ -237,23 +237,41 @@ def pool_evaluator(WF, pool_index, pool_data, E_prev):
     excitation_pool = pool_data["excitation indeces"]
     excitation_pool_type = pool_data["excitation type"]
 
-    # Updating last layer with the pool candidate
-    WF.ups_layout.excitation_indices[-1] = excitation_pool[pool_index]
-    WF.ups_layout.excitation_operator_type[-1] = excitation_pool_type[pool_index]
+    # Store original state to restore later
+    original_excitation_indices = WF.ups_layout.excitation_indices.copy()
+    original_excitation_types = WF.ups_layout.excitation_operator_type.copy()
+    original_n_params = WF.ups_layout.n_params
+    original_thetas = WF._thetas.copy()
+    original_ci_coeffs = WF.ci_coeffs.copy()
 
-    # Energy measurements to build system of equations
-    energies = [E_prev]
-    thetas = [0.0]
+    # Temporarily add one unitary to the layout
+    WF.ups_layout.excitation_indices.append(np.array(excitation_pool[pool_index])-WF.num_inactive_spin_orbs)
+    WF.ups_layout.excitation_operator_type.append(excitation_pool_type[pool_index])
+    WF.ups_layout.n_params += 1
+    WF._thetas.append(0.0)
+    WF.ci_coeffs = construct_ups_state(WF.ci_coeffs, WF.ci_info, WF.thetas, WF.ups_layout)
 
-    for l in range(1,5):
-        current_thetas = WF.thetas
-        current_thetas[-1] = (2*np.pi*l)/5.5
+    # Evaluate energy landscape at different theta values
+    energies = []
+    thetas = []
+
+    for l in range(0,5):
+        current_thetas = WF.thetas.copy()
+        current_thetas[-1] += (2*np.pi*l)/5.5
+        thetas.append(current_thetas[-1])
+        
+        # Temporarily set the theta
         WF.thetas = current_thetas
-        energies.append(WF.energy_elec)
-        thetas.append((2*np.pi*l)/5.5)
+        energies.append(float(expectation_value(WF.ci_coeffs, [H], WF.ci_coeffs, WF.ci_info, WF.thetas, WF.ups_layout)))
 
-    WF.num_energy_evals += 4  # adding rotoselect energy evaluations
+    # Restore original state
+    WF.ups_layout.excitation_indices = original_excitation_indices
+    WF.ups_layout.excitation_operator_type = original_excitation_types
+    WF.ups_layout.n_params = original_n_params
+    WF._thetas = original_thetas
+    WF.ci_coeffs = original_ci_coeffs
 
+    # Find global minimum using companion matrix method
     Thetas = np.array(thetas)
     Energies = np.array(energies)
 
@@ -278,10 +296,11 @@ def pool_parallel(WF, H, pool_data, E_prev):
     excitation_pool = pool_data["excitation indeces"]
     pool_idx_array = np.arange(len(excitation_pool))
 
-    # mp.set_start_method("spawn", force=True)
-
-    with mp.Pool(processes=os.cpu_count()) as pool:
-        results = pool.starmap(pool_evaluator, [(WF, pool_index, H, pool_data, E_prev) for pool_index in pool_idx_array])
+    # Sequential evaluation to avoid multiprocessing pickle issues
+    results = []
+    for pool_index in pool_idx_array:
+        result = pool_evaluator(WF, pool_index, H, pool_data)
+        results.append(result)
 
     return results
 
