@@ -142,9 +142,9 @@ output = {'molecule': molecule,
           'num_metadata': {'adapt_thr': adapt_thr, 
                            'opt_thr': opt_thr, 
                            'opt_max_iter': max_iter},
-          'ci_ref': cas_obj.e_tot-mol_obj.enuc, 
-          'en_traj': np.array(en_traj), 
-          'WF': WF,
+          'ci_ref': cas_obj.e_tot-mol_obj.enuc, # CASCI reference energy
+          'en_traj': np.array(en_traj), # array of electronic energie shape=(#layers)
+          'WF': WF, # SlowQuant WF object
           'num_measures': WF.num_energy_evals
           }
 
