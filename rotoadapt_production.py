@@ -115,7 +115,27 @@ H = hamiltonian_0i_0a(
 
 ## DEFINE EXCITATION POOL -> dictionary with data
 
-pool_data = rotoadapt_utils.pool(WF, so_ir, gen)
+pool_data = {
+    "excitation indeces": [],
+    "excitation type": [],
+    "excitation operator": []
+}
+
+num_inactive_so = WF.num_inactive_spin_orbs # use it to rescale operator indeces to the active space
+
+## EXCITATION WITH RESPECT TO HF REFERENCE
+
+## Generate indeces for singly-excited operators
+for a, i in iterate_t1(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
+    pool_data["excitation indeces"].append((i, a))
+    pool_data["excitation type"].append("single")
+    pool_data["excitation operator"].append(G1(i, a, True))
+
+## Generate indeces for doubly-excited operators
+for a, i, b, j in iterate_t2(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
+    pool_data["excitation indeces"].append((i, j, a, b))
+    pool_data["excitation type"].append("double")
+    pool_data["excitation operator"].append(G2(i, j, a, b, True))
 
 ## CALCULATE ROTOADAPT
 
@@ -150,5 +170,11 @@ output = {'molecule': molecule,
 # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT-gen.pkl'), 'wb') as f:
 #     pickle.dump(output, f)
 
-with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS-gen.pkl'), 'wb') as f:
+# Create results directory if it doesn't exist
+os.makedirs(results_folder, exist_ok=True)
+
+# Create results directory if it doesn't exist
+os.makedirs(results_folder, exist_ok=True)
+
+with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS.pkl'), 'wb') as f:
     pickle.dump(output, f)

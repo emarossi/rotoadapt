@@ -251,13 +251,12 @@ def pool_evaluator(WF, pool_index, H, pool_data, E_prev):
     WF._thetas.append(0.0)
     WF.ci_coeffs = construct_ups_state(WF.ci_coeffs, WF.ci_info, WF.thetas, WF.ups_layout)
 
-    # global minimum with companion matrix method --> TO DO: parallelize
+    # Evaluate energy landscape at different theta values
+    energies = []
+    thetas = []
 
-    energies = [E_prev]
-    thetas = [0.0]
-
-    for l in range(1,5):
-        current_thetas = pool_WF.thetas
+    for l in range(0,5):
+        current_thetas = WF.thetas.copy()
         current_thetas[-1] += (2*np.pi*l)/5.5
         thetas.append(current_thetas[-1])
         
@@ -272,9 +271,7 @@ def pool_evaluator(WF, pool_index, H, pool_data, E_prev):
     WF._thetas = original_thetas
     WF.ci_coeffs = original_ci_coeffs
 
-    WF.num_energy_evals += 4  # adding rotoselect energy evaluations
-    # global minimum with companion matrix method --> TO DO: parallelize
-
+    # Find global minimum using companion matrix method
     Thetas = np.array(thetas)
     Energies = np.array(energies)
 
@@ -298,10 +295,11 @@ def pool_parallel(WF, H, pool_data, E_prev):
     excitation_pool = pool_data["excitation indeces"]
     pool_idx_array = np.arange(len(excitation_pool))
 
-    # mp.set_start_method("spawn", force=True)
-
-    with mp.Pool(processes=os.cpu_count()) as pool:
-        results = pool.starmap(pool_evaluator, [(WF, pool_index, H, pool_data, E_prev) for pool_index in pool_idx_array])
+    # Sequential evaluation to avoid multiprocessing pickle issues
+    results = []
+    for pool_index in pool_idx_array:
+        result = pool_evaluator(WF, pool_index, H, pool_data)
+        results.append(result)
 
     return results
 
