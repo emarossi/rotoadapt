@@ -150,3 +150,7 @@ dmypy.json
 
 # Virtual environments
 .newvenv/
+
+
+# Data
+rotoadapt_analysis/
