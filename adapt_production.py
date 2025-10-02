@@ -45,12 +45,13 @@ full_opt = args.full_opt
 
 # Getting path to current and parent folder
 parent_folder = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
-results_folder = os.path.join(parent_folder, "rotoadapt/rotoadapt_analysis")
+results_folder = os.path.join(parent_folder, "rotoadapt_analysis")
 
 ## DEFINE MOLECULE IN PYSCF
 
 if molecule == 'H2O':
     # geometry = 'O 0.000000 0.000000 0.000000; H 0.960000 0.000000 0.000000; H -0.240365 0.929422 0.000000' #H2O equilibrium
+    geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA)
     geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA)
 
 if molecule == 'LiH':
@@ -120,7 +121,26 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
         epoch: gradient variation threshold
         orbital_opt: enable orbital optimization
     '''
-    
+
+    #DEFINE EXCITATION POOL: tuples contain indeces of occupied and unoccupied SOs characterizing excitations
+    excitation_pool: list[tuple[int, ...]] = []
+    excitation_pool_type: list[str] = []
+
+    #Generate indeces for singly-excited operators
+    for a, i in iterate_t1(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
+    #for a, i in iterate_t1_sa(self.active_occ_spin_idx, self.active_unocc_spin_idx):
+        excitation_pool.append((int(i),int(a)))
+        excitation_pool_type.append("single")
+
+    #Generate indeces for doubly-excited operators
+    for a, i, b, j in iterate_t2(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
+        excitation_pool.append((i, j, a, b))
+        excitation_pool_type.append("double")
+    #print(self.ups_layout.excitation_indices)
+    #print(self.ups_layout.excitation_operator_type)
+
+    print('POOL DATA', len(excitation_pool))
+
     nloop = 0
 
     # ADAPT ANSATZ + VQE
@@ -140,15 +160,28 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
         grad = []
 
         #GRADIENTS
-        # grad = adapt_utils.gradient_parallel(WF, H_ket, pool_data)
-        for T in pool_data["excitation operator"]:
+        for i in range(len(excitation_pool_type)):
 
-            gr = expectation_value(WF.ci_coeffs,[T],  H_ket,
+            #Looping through operators in the pool -> calculate gradient on the fly
+            if excitation_pool_type[i] == "single":
+                (i, a) = np.array(excitation_pool[i])
+                T = G1(i, a, True)
+            elif excitation_pool_type[i] == "double":
+                (i, j, a, b) = np.array(excitation_pool[i])
+                T = G2(i, j, a, b, True)
+            else:
+                raise ValueError(f"Got unknown excitation type {excitation_pool[i]}")
+
+            #Calculate gradient, i.e. commutator -> expectation value function input (bra, operator, ket (here Hket))
+            gr = expectation_value(WF.ci_coeffs, [T], H_ket,
                                 WF.ci_info, WF.thetas, WF.ups_layout)
             gr -= expectation_value(H_ket,[T],  WF.ci_coeffs,
                                 WF.ci_info, WF.thetas, WF.ups_layout)
             grad.append(gr)
-        
+
+            # Counting number of evaluations
+            WF.num_energy_evals += 2
+
         print()
         print("------GP Printing Grad and Excitation Pool")
         print("------GP #################################")
@@ -187,7 +220,11 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
         #del excitation_pool[max_arg]
         #del excitation_pool_type[max_arg]
         WF.ups_layout.n_params += 1
-        
+
+        # reset excitation pool (always the same)
+        excitation_pool = excitation_pool
+        excitation_pool_type = excitation_pool_type
+
         # add theta parameter for new operator
         WF._thetas.append(0.0)
         # np.append(WF._thetas, 0.0)
@@ -242,9 +279,12 @@ epoch_ca = 1.6e-3
 WF, en_traj, rdm1_traj = do_adapt(WF, epoch=epoch_ca, maxiter=30)
 
 output = {'molecule': molecule,
-          'ci_ref': cas_obj.e_tot-mol_obj.enuc, # CASCI reference energy
-          'en_traj': np.array(en_traj), # array of electronic energie shape=(#layers)
-          'rdm1_traj': rdm1_traj, # rdm1 over the whole trajectory WF object
+          'num_metadata': {'adapt_thr': 1e-6,
+                           'opt_thr': 0,
+                           'opt_max_iter': 1000},
+          'ci_ref': cas_obj.e_tot-mol_obj.enuc,
+          'en_traj': np.array(en_traj),
+          'WF': WF,
           'num_measures': WF.num_energy_evals
           }
 
