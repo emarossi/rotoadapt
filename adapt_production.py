@@ -42,7 +42,7 @@ full_opt = args.full_opt
 
 # Getting path to current and parent folder
 parent_folder = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
-results_folder = os.path.join(parent_folder, "rotoadapt_analysis")
+results_folder = os.path.join(parent_folder, "rotoadapt/rotoadapt_analysis")
 
 ## DEFINE MOLECULE IN PYSCF
 
@@ -228,11 +228,8 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
         # np.append(WF._thetas, 0.0)
 
         # VQE optimization
-        if full_opt == True:
-            WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=False) # full VQE optimization
-
-        if full_opt == False:
-            WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=True) # Optimize only last unitary
+        WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt)  # full VQE optimization
+        # WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt)    # Optimize only last unitary
 
         deltaE_adapt = np.abs(cas_en-WF.energy_elec)
         rdm1_traj.append(WF.rdm1)
@@ -274,7 +271,18 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
 
 epoch_ca = 1.6e-3
 
-WF, en_traj, rdm1_traj = do_adapt(WF, epoch=epoch_ca, maxiter=30)
+WF, en_traj = do_adapt(WF, epoch=epoch_ca)
+
+import pickle
+
+# Create pickleable WF object representation
+wf_data = {
+    'num_params': WF.ups_layout.n_params,
+    'excitation_indices': [idx.tolist() if hasattr(idx, 'tolist') else idx for idx in WF.ups_layout.excitation_indices],
+    'excitation_types': WF.ups_layout.excitation_operator_type,
+    'thetas': WF.thetas.copy(),
+    'final_energy': WF.energy_elec
+}
 
 output = {'molecule': molecule,
           'num_metadata': {'adapt_thr': 1e-6,
@@ -282,16 +290,15 @@ output = {'molecule': molecule,
                            'opt_max_iter': 1000},
           'ci_ref': cas_obj.e_tot-mol_obj.enuc,
           'en_traj': np.array(en_traj),
-          'WF': WF,
+          'wf_data': wf_data, # Essential WF information instead of full object
           'num_measures': WF.num_energy_evals
           }
 
 ## OUTPUT ONLY LAST OPTIMIZATION
 
-if full_opt == True:
-    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR.pkl'), 'wb') as f:
-        pickle.dump(output, f)
+## OUTPUT FULL VQE
+# Create results directory if it doesn't exist
+os.makedirs(results_folder, exist_ok=True)
 
-if full_opt == False:
-    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR_last_opt.pkl'), 'wb') as f:
-        pickle.dump(output, f)    
+with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR.pkl'), 'wb') as f:
+    pickle.dump(output, f)
