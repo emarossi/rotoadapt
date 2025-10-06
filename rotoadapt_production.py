@@ -10,10 +10,6 @@ from slowquant.molecularintegrals.integralfunctions import one_electron_integral
 from slowquant.unitary_coupled_cluster.util import iterate_t1, iterate_t2
 from slowquant.unitary_coupled_cluster.util import iterate_t1_generalized, iterate_t2_generalized
 
-from slowquant.unitary_coupled_cluster.util import iterate_t1_generalized, iterate_t2_generalized
-
-from slowquant.unitary_coupled_cluster.util import iterate_t1_generalized, iterate_t2_generalized
-
 
 # Operators
 from slowquant.unitary_coupled_cluster.operators import G1, G2
@@ -189,7 +185,7 @@ output = {'molecule': molecule,
           'num_measures': WF.num_energy_evals
           }
 
-with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT-gen.pkl'), 'wb') as f:
+with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT.pkl'), 'wb') as f:
     pickle.dump(output, f)
 
 # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS.pkl'), 'wb') as f:
