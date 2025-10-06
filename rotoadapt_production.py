@@ -11,6 +11,8 @@ from slowquant.unitary_coupled_cluster.util import iterate_t1_generalized, itera
 
 from slowquant.unitary_coupled_cluster.util import iterate_t1_generalized, iterate_t2_generalized
 
+from slowquant.unitary_coupled_cluster.util import iterate_t1_generalized, iterate_t2_generalized
+
 
 # Operators
 from slowquant.unitary_coupled_cluster.operators import G1, G2
@@ -128,11 +130,11 @@ pool_data = {
 
 num_inactive_so = WF.num_inactive_spin_orbs # use it to rescale operator indeces to the active space
 
-## EXCITATION WITH RESPECT TO HF REFERENCE
+## GENERALIZED EXCITATION
 
 ## Generate indeces for singly-excited operators
-for a, i in iterate_t1(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
-    pool_data["excitation indeces"].append((i, a))
+for a, i in iterate_t1_generalized(WF.num_spin_orbs):
+    pool_data["excitation indeces"].append((i, a))            
     pool_data["excitation type"].append("single")
     pool_data["excitation operator"].append(G1(i, a, True))
 
@@ -184,17 +186,8 @@ output = {'molecule': molecule,
           'num_measures': WF.num_energy_evals
           }
 
-with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT-gen.pkl'), 'wb') as f:
+with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT.pkl'), 'wb') as f:
     pickle.dump(output, f)
 
 # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS.pkl'), 'wb') as f:
 #     pickle.dump(output, f)
-
-# Create results directory if it doesn't exist
-os.makedirs(results_folder, exist_ok=True)
-
-# Create results directory if it doesn't exist
-os.makedirs(results_folder, exist_ok=True)
-
-with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS.pkl'), 'wb') as f:
-    pickle.dump(output, f)
