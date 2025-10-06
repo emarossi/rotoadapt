@@ -23,8 +23,11 @@ def global_min_search(A, B, C, D, E):
     """
     Find the global minimum of energy landscape using the compation matrix method
     E(theta) = A + B*cos(theta) + C*sin(theta) + D*cos(2*theta) + E*sin(2*theta)
+
+    Arguments
+        A, B, C, D, E: energy landscape coefficients
     
-    Returns:
+    Returns
         theta_min: the angle (radians) giving the minimum energy
         E_min: the minimum energy
     """
@@ -42,29 +45,66 @@ def global_min_search(A, B, C, D, E):
     p2 = -12*E
     p1 = -2*B - 8*D
     p0 = 2*E + C
+
+    # Determine polynomial degree
+    coeffs_array = np.array([p0, p1, p2, p3, p4])
+
+    # Checking if polynomial is not zero -> can happen with generalized excitation ops
+    if not np.all(coeffs_array == 0):
+
+        tol = 1e-6
+
+        def cmat_builder(coeffs):
+            """
+            Build the companion matrix for a normalized polynomial.
+            
+            Arguments
+                coeffs: coeffs of monic polynomial (normalized to leading order) with minus sign (last = 1)
+            
+            Returns
+                C: companion matrix 
+            """
+            deg = len(coeffs) - 1
+            if deg < 1:
+                return None
+            C = np.zeros((deg, deg))
+            C[1:, :-1] = np.eye(deg - 1)
+            C[:, -1] = coeffs[:-1]
+
+            return C
+
+        # Checking the order of the polynomial -> getting corresponding companion matrix
+
+        if np.abs(p4) > np.abs(p3)*tol:
+            Cmat = cmat_builder([-p0/p4, -p1/p4, -p2/p4, -p3/p4, 1])
+            
+        elif np.abs(p3) > np.abs(p2)*tol:
+            Cmat = cmat_builder([-p0/p3, -p1/p3, -p2/p3, 1])
+
+        elif np.abs(p2) > np.abs(p1)*tol:
+            Cmat = cmat_builder([-p0/p2, -p1/p2, 1])
+            
+        else:
+            Cmat = cmat_builder([-p0/p2, 1])
+
+        # Eigenvalues of Cmat are roots of the quartic polynomial = zeroes of derivative function
+        roots = np.linalg.eigvals(Cmat)
     
-    # Build companion matrix -> divide by p4 to make the polynomial monic
-    Cmat = np.array([
-        [0, 0, 0, -p0/p4],
-        [1, 0, 0, -p1/p4],
-        [0, 1, 0, -p2/p4],
-        [0, 0, 1, -p3/p4]
-    ])
+        # Keep only real roots
+        real_roots = roots[np.isreal(roots)].real
     
-    # Eigenvalues of Cmat are roots of the quartic polynomial = zeroes of derivative function
-    roots = np.linalg.eigvals(Cmat)
+        # Convert x -> theta
+        thetas = 2 * np.arctan(real_roots)
     
-    # Keep only real roots
-    real_roots = roots[np.isreal(roots)].real
-    
-    # Convert x -> theta
-    thetas = 2 * np.arctan(real_roots)
-    
-    # Evaluate energy at candidate points and find global minimum
-    energies = energy_landscape(A, B, C, D, E, thetas)
-    idx_min = np.argmin(energies)
-    theta_min = thetas[idx_min]
-    energy_min = energies[idx_min]
+        # Evaluate energy at candidate points and find global minimum
+        energies = energy_landscape(A, B, C, D, E, thetas)
+        idx_min = np.argmin(energies)
+        theta_min = thetas[idx_min]
+        energy_min = energies[idx_min]
+
+    else:
+        theta_min = 0
+        energy_min = 0
     
     return theta_min, energy_min
 
