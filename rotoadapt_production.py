@@ -133,31 +133,31 @@ num_inactive_so = WF.num_inactive_spin_orbs # use it to rescale operator indeces
 ## GENERALIZED EXCITATION
 
 ## Generate indeces for singly-excited operators
-for a, i in iterate_t1_generalized(WF.num_spin_orbs):
-    pool_data["excitation indeces"].append((i, a))            
-    pool_data["excitation type"].append("single")
-    pool_data["excitation operator"].append(G1(i, a, True))
+# for a, i in iterate_t1_generalized(WF.num_spin_orbs):
+#     pool_data["excitation indeces"].append((i, a))            
+#     pool_data["excitation type"].append("single")
+#     pool_data["excitation operator"].append(G1(i, a, True))
 
-## Generate indeces for doubly-excited operators
-for a, i, b, j in iterate_t2_generalized(WF.num_spin_orbs):
-    pool_data["excitation indeces"].append((i, j, a, b))
-    pool_data["excitation type"].append("double")
-    pool_data["excitation operator"].append(G2(i, j, a, b, True))
+# ## Generate indeces for doubly-excited operators
+# for a, i, b, j in iterate_t2_generalized(WF.num_spin_orbs):
+#     pool_data["excitation indeces"].append((i, j, a, b))
+#     pool_data["excitation type"].append("double")
+#     pool_data["excitation operator"].append(G2(i, j, a, b, True))
 
 
 ## EXCITATION WITH RESPECT TO HF REFERENCE
 
 ## Generate indeces for singly-excited operators
-# for a, i in iterate_t1(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
-#     pool_data["excitation indeces"].append((i, a))            
-#     pool_data["excitation type"].append("single")
-#     pool_data["excitation operator"].append(G1(i, a, True))
+for a, i in iterate_t1(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
+    pool_data["excitation indeces"].append((i, a))            
+    pool_data["excitation type"].append("single")
+    pool_data["excitation operator"].append(G1(i, a, True))
 
 ## Generate indeces for doubly-excited operators
-# for a, i, b, j in iterate_t2(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
-#     pool_data["excitation indeces"].append((i, j, a, b))
-#     pool_data["excitation type"].append("double")
-#     pool_data["excitation operator"].append(G2(i, j, a, b, True))
+for a, i, b, j in iterate_t2(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
+    pool_data["excitation indeces"].append((i, j, a, b))
+    pool_data["excitation type"].append("double")
+    pool_data["excitation operator"].append(G2(i, j, a, b, True))
 
 ## CALCULATE ROTOADAPT
 
