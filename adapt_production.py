@@ -213,8 +213,8 @@ def do_adapt(WF, maxiter=1000, epoch=1e-6 , orbital_opt: bool = False):
         # np.append(WF._thetas, 0.0)
 
         # VQE optimization
-        WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt)  # full VQE optimization
-        # WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt)    # Optimize only last unitary
+        # WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=False)  # full VQE optimization
+        WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=True)    # Optimize only last unitary
 
         deltaE_adapt = np.abs(cas_en-WF.energy_elec)
 
@@ -274,12 +274,9 @@ output = {'molecule': molecule,
           }
 
 ## OUTPUT ONLY LAST OPTIMIZATION
-# with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR_last_opt.pkl'), 'wb') as f:
-#     pickle.dump(output, f)
+with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR_last_opt.pkl'), 'wb') as f:
+    pickle.dump(output, f)
 
 ## OUTPUT FULL VQE
-# Create results directory if it doesn't exist
-os.makedirs(results_folder, exist_ok=True)
-
-with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR.pkl'), 'wb') as f:
-    pickle.dump(output, f)
+# with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR.pkl'), 'wb') as f:
+#     pickle.dump(output, f)

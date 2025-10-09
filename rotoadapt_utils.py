@@ -134,7 +134,7 @@ def optimizer(thetas, energies):
 
     return theta_min, energy_min
 
-def pool_evaluator(WF, pool_index, H, pool_data):
+def pool_evaluator(WF, pool_index, H, pool_data, E_prev):
     '''
     Extends ansatz with candidate unitary from pool
     Finds global minimum using companion matrix method
@@ -167,12 +167,13 @@ def pool_evaluator(WF, pool_index, H, pool_data):
     WF._thetas.append(0.0)
     WF.ci_coeffs = construct_ups_state(WF.ci_coeffs, WF.ci_info, WF.thetas, WF.ups_layout)
 
-    # Evaluate energy landscape at different theta values
-    energies = []
-    thetas = []
+    # global minimum with companion matrix method --> TO DO: parallelize
 
-    for l in range(0,5):
-        current_thetas = WF.thetas.copy()
+    energies = [E_prev]
+    thetas = [0.0]
+
+    for l in range(1,5):
+        current_thetas = pool_WF.thetas
         current_thetas[-1] += (2*np.pi*l)/5.5
         thetas.append(current_thetas[-1])
         
@@ -196,7 +197,7 @@ def pool_evaluator(WF, pool_index, H, pool_data):
     return theta_min, E_min
 
 
-def pool_parallel(WF, H, pool_data):
+def pool_parallel(WF, H, pool_data, E_prev):
     '''
     Evaluates energy estimates over the pool (sequential version to avoid pickle issues)
 
@@ -211,11 +212,10 @@ def pool_parallel(WF, H, pool_data):
     excitation_pool = pool_data["excitation indeces"]
     pool_idx_array = np.arange(len(excitation_pool))
 
-    # Sequential evaluation to avoid multiprocessing pickle issues
-    results = []
-    for pool_index in pool_idx_array:
-        result = pool_evaluator(WF, pool_index, H, pool_data)
-        results.append(result)
+    # mp.set_start_method("spawn", force=True)
+
+    with mp.Pool(processes=os.cpu_count()) as pool:
+        results = pool.starmap(pool_evaluator, [(WF, pool_index, H, pool_data, E_prev) for pool_index in pool_idx_array])
 
     return results
 
@@ -404,7 +404,7 @@ def rotoselect(WF, H, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_thr
     while converged == False:
 
         # Looping through pool operator -> get the best ansatz
-        results = pool_parallel(WF, H, pool_data)
+        results = pool_parallel(WF, H, pool_data, E_prev_adapt)
         theta_pool, energy_pool = zip(*results)
 
         op_index = np.argmin(energy_pool)
@@ -474,7 +474,7 @@ def rotoselect_opt(WF, H, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt
     while converged == False:
 
         # Looping through pool operator -> get the best ansatz
-        results = pool_parallel(WF, H, pool_data)
+        results = pool_parallel(WF, H, pool_data, E_prev_adapt)
         theta_pool, energy_pool = zip(*results)
         op_index = np.argmin(energy_pool)
 
