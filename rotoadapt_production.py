@@ -28,6 +28,7 @@ parser = argparse.ArgumentParser(description="rodoadapt script - returns energy 
 # Add arguments
 parser.add_argument("--mol", type=str, required = True, help="Molecule (H2O, LiH)")
 parser.add_argument("--AS", type=int, nargs=2, required = True, help="Active space nEL nMO")
+parser.add_argument("--gen", type=bool, default = False, help="Generalized excitation operators")
 parser.add_argument("--adapt_thr", type=float, default=5e-6, help="adapt layer threshold")
 parser.add_argument("--opt_thr", type=float, default=1e-5, help="adapt optimization threshold")
 parser.add_argument("--opt_max_iter", type=float, default=20, help="max number of optimization cycles")
@@ -37,6 +38,7 @@ args = parser.parse_args()
 
 molecule = args.mol  # molecule specifics via string
 AS = args.AS  # active space (nEL, nMO)
+gen = args.gen
 adapt_thr = args.adapt_thr
 opt_thr = args.opt_thr
 max_iter = args.opt_max_iter
@@ -59,9 +61,12 @@ if molecule == 'N2':
     geometry = 'N 0.000000 0.000000 0.000000; N 2.0980 0.00000 0.000000' #N2 stretched
 
 mol_obj = gto.Mole()
-mol_obj.build(atom = geometry, basis = 'sto-3g')
+mol_obj.build(atom = geometry, basis = 'sto-3g', symmetry='c2v')
 hf_obj = scf.RHF(mol_obj)
 hf_obj.kernel()
+
+# Getting the IR of the spin orbitals
+so_ir = [int(mo_ir) for mo_ir in hf_obj.get_orbsym(hf_obj.mo_coeff) for _ in range(2)]
 
 nEL = AS[0]
 nMO = AS[1]
@@ -110,42 +115,7 @@ H = hamiltonian_0i_0a(
 
 ## DEFINE EXCITATION POOL -> dictionary with data
 
-pool_data = {
-    "excitation indeces": [],
-    "excitation type": [],
-    "excitation operator": []
-}
-
-num_inactive_so = WF.num_inactive_spin_orbs # use it to rescale operator indeces to the active space
-
-## GENERALIZED EXCITATION
-
-## Generate indeces for singly-excited operators
-# for a, i in iterate_t1_generalized(WF.num_spin_orbs):
-#     pool_data["excitation indeces"].append((i, a))            
-#     pool_data["excitation type"].append("single")
-#     pool_data["excitation operator"].append(G1(i, a, True))
-
-# ## Generate indeces for doubly-excited operators
-# for a, i, b, j in iterate_t2_generalized(WF.num_spin_orbs):
-#     pool_data["excitation indeces"].append((i, j, a, b))
-#     pool_data["excitation type"].append("double")
-#     pool_data["excitation operator"].append(G2(i, j, a, b, True))
-
-
-## EXCITATION WITH RESPECT TO HF REFERENCE
-
-## Generate indeces for singly-excited operators
-for a, i in iterate_t1(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
-    pool_data["excitation indeces"].append((i, a))            
-    pool_data["excitation type"].append("single")
-    pool_data["excitation operator"].append(G1(i, a, True))
-
-## Generate indeces for doubly-excited operators
-for a, i, b, j in iterate_t2(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
-    pool_data["excitation indeces"].append((i, j, a, b))
-    pool_data["excitation type"].append("double")
-    pool_data["excitation operator"].append(G2(i, j, a, b, True))
+pool_data = rotoadapt_utils.pool(WF, so_ir, gen)
 
 ## CALCULATE ROTOADAPT
 
