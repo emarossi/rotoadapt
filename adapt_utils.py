@@ -92,7 +92,17 @@ def pool(WF, so_ir, generalized):
     return pool_data
 
 def gradient_evaluator(WF, H_ket, T):
-        
+    '''
+    Calculate gradient - analytical evaluation
+
+    Arguments
+        WF: SlowQuant wavefunction object
+        H_ket: propagated states
+        T: excitation operator
+
+    Returns
+        gr: gradient
+    ''' 
     gr = expectation_value(WF.ci_coeffs, [T], H_ket,
                             WF.ci_info, WF.thetas, WF.ups_layout)
     gr -= expectation_value(H_ket, [T], WF.ci_coeffs,
@@ -102,7 +112,17 @@ def gradient_evaluator(WF, H_ket, T):
 
 
 def gradient_parallel(WF, H_ket, pool_data):
-    
+    '''
+    Parallelizes gradient calculation over the pool
+
+    Arguments
+        WF: SlowQuant wavefunction object
+        H_ket: propagated states
+        T: excitation operator
+
+    Returns
+        results: list of gradients over the pool
+    '''
     with mp.Pool(processes=os.cpu_count()) as pool:
         results = pool.starmap(gradient_evaluator, [(WF, H_ket, T) for T in pool_data["excitation operator"]])
 
