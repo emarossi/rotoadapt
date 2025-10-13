@@ -20,9 +20,6 @@ from slowquant.unitary_coupled_cluster.ups_wavefunction import WaveFunctionUPS
 # Functions for rotoadapt
 import rotoadapt_utils
 
-# Functions for rotoadapt
-import rotoadapt_utils
-
 ## INPUT VARIABLES
 
 # Create parser
@@ -32,7 +29,9 @@ parser = argparse.ArgumentParser(description="rodoadapt script - returns energy 
 parser.add_argument("--mol", type=str, required = True, help="Molecule (H2O, LiH)")
 parser.add_argument("--AS", type=int, nargs=2, required = True, help="Active space nEL nMO")
 parser.add_argument("--gen", type=bool, default = False, help="Generalized excitation operators")
-parser.add_argument("--full_opt", type=bool, default = False, help="full VQE optimization")
+parser.add_argument("--adapt_thr", type=float, default=5e-6, help="adapt layer threshold")
+parser.add_argument("--opt_thr", type=float, default=1e-5, help="adapt optimization threshold")
+parser.add_argument("--opt_max_iter", type=float, default=20, help="max number of optimization cycles")
 
 # Parse arguments
 args = parser.parse_args()
@@ -40,7 +39,9 @@ args = parser.parse_args()
 molecule = args.mol  # molecule specifics via string
 AS = args.AS  # active space (nEL, nMO)
 gen = args.gen
-full_opt = args.full_opt
+adapt_thr = args.adapt_thr
+opt_thr = args.opt_thr
+max_iter = args.opt_max_iter
 
 # Getting path to current and parent folder
 parent_folder = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
@@ -111,7 +112,8 @@ rdm1_traj = [WF.rdm1]
 
 pool_data = rotoadapt_utils.pool(WF, so_ir, gen)
 
-def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
+
+def do_adapt(WF, maxiter=10, epoch=1e-6 , orbital_opt: bool = False):
     '''Run Adapt VQE algorithm
 
     args:
@@ -119,26 +121,7 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
         epoch: gradient variation threshold
         orbital_opt: enable orbital optimization
     '''
-
-    #DEFINE EXCITATION POOL: tuples contain indeces of occupied and unoccupied SOs characterizing excitations
-    excitation_pool: list[tuple[int, ...]] = []
-    excitation_pool_type: list[str] = []
-
-    #Generate indeces for singly-excited operators
-    for a, i in iterate_t1(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
-    #for a, i in iterate_t1_sa(self.active_occ_spin_idx, self.active_unocc_spin_idx):
-        excitation_pool.append((int(i),int(a)))
-        excitation_pool_type.append("single")
-
-    #Generate indeces for doubly-excited operators
-    for a, i, b, j in iterate_t2(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
-        excitation_pool.append((i, j, a, b))
-        excitation_pool_type.append("double")
-    #print(self.ups_layout.excitation_indices)
-    #print(self.ups_layout.excitation_operator_type)
-
-    print('POOL DATA', len(excitation_pool))
-
+    
     nloop = 0
 
     # ADAPT ANSATZ + VQE
@@ -158,17 +141,9 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
         grad = []
 
         #GRADIENTS
-        for i in range(len(excitation_pool_type)):
-
-            #Looping through operators in the pool -> calculate gradient on the fly
-            if excitation_pool_type[i] == "single":
-                (i, a) = np.array(excitation_pool[i])
-                T = G1(i, a, True)
-            elif excitation_pool_type[i] == "double":
-                (i, j, a, b) = np.array(excitation_pool[i])
-                T = G2(i, j, a, b, True)
-            else:
-                raise ValueError(f"Got unknown excitation type {excitation_pool[i]}")
+        for i in range(len(pool_data["excitation type"])):
+            
+            T = pool_data["excitation operator"][i]
 
             #Calculate gradient, i.e. commutator -> expectation value function input (bra, operator, ket (here Hket))
             gr = expectation_value(WF.ci_coeffs, [T], H_ket,
@@ -176,10 +151,7 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
             gr -= expectation_value(H_ket,[T],  WF.ci_coeffs,
                                 WF.ci_info, WF.thetas, WF.ups_layout)
             grad.append(gr)
-
-            # Counting number of evaluations
-            WF.num_energy_evals += 2
-
+        
         print()
         print("------GP Printing Grad and Excitation Pool")
         print("------GP #################################")
@@ -218,11 +190,7 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
         #del excitation_pool[max_arg]
         #del excitation_pool_type[max_arg]
         WF.ups_layout.n_params += 1
-
-        # reset excitation pool (always the same)
-        excitation_pool = excitation_pool
-        excitation_pool_type = excitation_pool_type
-
+        
         # add theta parameter for new operator
         WF._thetas.append(0.0)
         # np.append(WF._thetas, 0.0)
@@ -274,7 +242,18 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
 
 epoch_ca = 1.6e-3
 
-WF, en_traj, rdm1_traj = do_adapt(WF, epoch=epoch_ca, maxiter=30)
+WF, en_traj = do_adapt(WF, epoch=epoch_ca, maxiter=50)
+
+import pickle
+
+# Create pickleable WF object representation
+wf_data = {
+    'num_params': WF.ups_layout.n_params,
+    'excitation_indices': [idx.tolist() if hasattr(idx, 'tolist') else idx for idx in WF.ups_layout.excitation_indices],
+    'excitation_types': WF.ups_layout.excitation_operator_type,
+    'thetas': WF.thetas.copy(),
+    'final_energy': WF.energy_elec
+}
 
 output = {'molecule': molecule,
           'num_metadata': {'adapt_thr': 1e-6,
