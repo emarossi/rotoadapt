@@ -283,7 +283,9 @@ def pool_evaluator(WF, pool_index, H, pool_data, E_prev):
     WF._thetas = original_thetas
     WF.ci_coeffs = original_ci_coeffs
 
-    # Find global minimum using companion matrix method
+    WF.num_energy_evals += 4  # adding rotoselect energy evaluations
+    # global minimum with companion matrix method --> TO DO: parallelize
+
     Thetas = np.array(thetas)
     Energies = np.array(energies)
 
