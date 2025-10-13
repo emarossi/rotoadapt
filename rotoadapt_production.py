@@ -189,7 +189,7 @@ output = {'molecule': molecule,
           'num_measures': WF.num_energy_evals
           }
 
-with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT.pkl'), 'wb') as f:
+with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT-gen.pkl'), 'wb') as f:
     pickle.dump(output, f)
 
 # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS.pkl'), 'wb') as f:
