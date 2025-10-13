@@ -17,7 +17,7 @@ from slowquant.unitary_coupled_cluster.operator_state_algebra import propagate_s
 from slowquant.unitary_coupled_cluster.ups_wavefunction import WaveFunctionUPS
 
 # Functions for rotoadapt
-import rotoadapt_utils
+import adapt_utils
 
 ## INPUT VARIABLES
 
@@ -101,9 +101,9 @@ WF = WaveFunctionUPS(
 
 en_traj = [hf_obj.energy_tot()-mol_obj.enuc]
 
-pool_data = rotoadapt_utils.pool(WF, so_ir, gen)
+pool_data = adapt_utils.pool(WF, so_ir, gen)
 
-def do_adapt(WF, maxiter=10, epoch=1e-6 , orbital_opt: bool = False):
+def do_adapt(WF, maxiter=1000, epoch=1e-6 , orbital_opt: bool = False):
     '''Run Adapt VQE algorithm
     
     args:
@@ -131,16 +131,18 @@ def do_adapt(WF, maxiter=10, epoch=1e-6 , orbital_opt: bool = False):
         grad = []
         
         #GRADIENTS
-        for i in range(len(pool_data["excitation type"])):
-            
-            T = pool_data["excitation operator"][i]
+        grad = adapt_utils.gradient_parallel(WF, H_ket, pool_data)
 
-            #Calculate gradient, i.e. commutator -> expectation value function input (bra, operator, ket (here Hket))
-            gr = expectation_value(WF.ci_coeffs, [T], H_ket,
-                                WF.ci_info, WF.thetas, WF.ups_layout)
-            gr -= expectation_value(H_ket, [T], WF.ci_coeffs,
-                                WF.ci_info, WF.thetas, WF.ups_layout)
-            grad.append(gr)
+        # for i in range(len(pool_data["excitation type"])):
+            
+        #     T = pool_data["excitation operator"][i]
+
+        #     #Calculate gradient, i.e. commutator -> expectation value function input (bra, operator, ket (here Hket))
+        #     gr = expectation_value(WF.ci_coeffs, [T], H_ket,
+        #                         WF.ci_info, WF.thetas, WF.ups_layout)
+        #     gr -= expectation_value(H_ket, [T], WF.ci_coeffs,
+        #                         WF.ci_info, WF.thetas, WF.ups_layout)
+        #     grad.append(gr)
         
         print()
         print("------GP Printing Grad and Excitation Pool")

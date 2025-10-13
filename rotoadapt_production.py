@@ -118,8 +118,8 @@ pool_data = rotoadapt_utils.pool(WF, so_ir, gen)
 
 # Add Rotomeasurements
 
-WF, en_traj = rotoadapt_utils.rotoselect_opt(WF, H, pool_data, cas_en)    # rotoselect + full VQE optimzation
-# WF, en_traj = rotoadapt_utils.rotoselect(WF, H, pool_data, cas_en)  # rotoselect - no optimization
+# WF, en_traj = rotoadapt_utils.rotoselect_opt(WF, H, pool_data, cas_en)    # rotoselect + full VQE optimzation
+WF, en_traj = rotoadapt_utils.rotoselect(WF, H, pool_data, cas_en)  # rotoselect - no optimization
 
 # SAVING RELEVANT OBJECTS
 
@@ -135,8 +135,8 @@ output = {'molecule': molecule,
           'num_measures': WF.num_energy_evals
           }
 
-with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT-gen.pkl'), 'wb') as f:
-    pickle.dump(output, f)
-
-# with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS.pkl'), 'wb') as f:
+# with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT-gen.pkl'), 'wb') as f:
 #     pickle.dump(output, f)
+
+with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS-gen.pkl'), 'wb') as f:
+    pickle.dump(output, f)
