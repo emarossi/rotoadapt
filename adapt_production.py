@@ -17,7 +17,7 @@ from slowquant.unitary_coupled_cluster.operator_state_algebra import propagate_s
 from slowquant.unitary_coupled_cluster.ups_wavefunction import WaveFunctionUPS
 
 # Functions for rotoadapt
-import adapt_utils
+import rotoadapt_utils
 
 ## INPUT VARIABLES
 
@@ -104,9 +104,10 @@ WF.num_energy_evals = 0
 
 en_traj = [hf_obj.energy_tot()-mol_obj.enuc]
 
-pool_data = adapt_utils.pool(WF, so_ir, gen)
 
-def do_adapt(WF, maxiter=1000, epoch=1e-6 , orbital_opt: bool = False):
+pool_data = rotoadapt_utils.pool(WF, so_ir, gen)
+
+def do_adapt(WF, maxiter=10, epoch=1e-6 , orbital_opt: bool = False):
     '''Run Adapt VQE algorithm
 
     args:
@@ -114,26 +115,7 @@ def do_adapt(WF, maxiter=1000, epoch=1e-6 , orbital_opt: bool = False):
         epoch: gradient variation threshold
         orbital_opt: enable orbital optimization
     '''
-
-    #DEFINE EXCITATION POOL: tuples contain indeces of occupied and unoccupied SOs characterizing excitations
-    excitation_pool: list[tuple[int, ...]] = []
-    excitation_pool_type: list[str] = []
-
-    #Generate indeces for singly-excited operators
-    for a, i in iterate_t1(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
-    #for a, i in iterate_t1_sa(self.active_occ_spin_idx, self.active_unocc_spin_idx):
-        excitation_pool.append((int(i),int(a)))
-        excitation_pool_type.append("single")
-
-    #Generate indeces for doubly-excited operators
-    for a, i, b, j in iterate_t2(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
-        excitation_pool.append((i, j, a, b))
-        excitation_pool_type.append("double")
-    #print(self.ups_layout.excitation_indices)
-    #print(self.ups_layout.excitation_operator_type)
-
-    print('POOL DATA', len(excitation_pool))
-
+    
     nloop = 0
 
     # ADAPT ANSATZ + VQE
@@ -153,17 +135,9 @@ def do_adapt(WF, maxiter=1000, epoch=1e-6 , orbital_opt: bool = False):
         grad = []
 
         #GRADIENTS
-        for i in range(len(excitation_pool_type)):
-
-            #Looping through operators in the pool -> calculate gradient on the fly
-            if excitation_pool_type[i] == "single":
-                (i, a) = np.array(excitation_pool[i])
-                T = G1(i, a, True)
-            elif excitation_pool_type[i] == "double":
-                (i, j, a, b) = np.array(excitation_pool[i])
-                T = G2(i, j, a, b, True)
-            else:
-                raise ValueError(f"Got unknown excitation type {excitation_pool[i]}")
+        for i in range(len(pool_data["excitation type"])):
+            
+            T = pool_data["excitation operator"][i]
 
             #Calculate gradient, i.e. commutator -> expectation value function input (bra, operator, ket (here Hket))
             gr = expectation_value(WF.ci_coeffs, [T], H_ket,
@@ -171,10 +145,7 @@ def do_adapt(WF, maxiter=1000, epoch=1e-6 , orbital_opt: bool = False):
             gr -= expectation_value(H_ket, [T], WF.ci_coeffs,
                                 WF.ci_info, WF.thetas, WF.ups_layout)
             grad.append(gr)
-
-            # Counting number of evaluations
-            WF.num_energy_evals += 2
-
+        
         print()
         print("------GP Printing Grad and Excitation Pool")
         print("------GP #################################")
@@ -213,11 +184,7 @@ def do_adapt(WF, maxiter=1000, epoch=1e-6 , orbital_opt: bool = False):
         #del excitation_pool[max_arg]
         #del excitation_pool_type[max_arg]
         WF.ups_layout.n_params += 1
-
-        # reset excitation pool (always the same)
-        excitation_pool = excitation_pool
-        excitation_pool_type = excitation_pool_type
-
+        
         # add theta parameter for new operator
         WF._thetas.append(0.0)
         # np.append(WF._thetas, 0.0)
