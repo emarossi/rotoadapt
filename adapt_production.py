@@ -21,6 +21,9 @@ from slowquant.unitary_coupled_cluster.ups_wavefunction import WaveFunctionUPS
 # Functions for rotoadapt
 import rotoadapt_utils
 
+# Functions for rotoadapt
+import rotoadapt_utils
+
 ## INPUT VARIABLES
 
 # Create parser
@@ -112,6 +115,8 @@ WF.num_energy_evals = 0
 en_traj = [hf_obj.energy_tot()-mol_obj.enuc]
 rdm1_traj = [WF.rdm1]
 
+
+pool_data = rotoadapt_utils.pool(WF, so_ir, gen)
 
 pool_data = rotoadapt_utils.pool(WF, so_ir, gen)
 

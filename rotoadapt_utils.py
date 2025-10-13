@@ -19,17 +19,6 @@ def pool(WF, so_ir, generalized):
     Returns
         pool_data: pool data with symmetry allowed excitations
     '''
-    '''
-    Defines the excitation pool and implements symmetry filter.
-
-    Arguments
-        WF: SlowQuant wave function object
-        so_ir: list of irreducible representation labels for each spin orbital
-        generalized: generalized pool or not?->Bool
-
-    Returns
-        pool_data: pool data with symmetry allowed excitations
-    '''
     pool_data = {
     "excitation indeces": [],
     "excitation type": [],
@@ -271,17 +260,8 @@ def pool_evaluator(WF, pool_index, H, pool_data, E_prev):
         current_thetas = pool_WF.thetas
         current_thetas[-1] += (2*np.pi*l)/5.5
         thetas.append(current_thetas[-1])
-        
-        # Temporarily set the theta
-        WF.thetas = current_thetas
-        energies.append(float(expectation_value(WF.ci_coeffs, [H], WF.ci_coeffs, WF.ci_info, WF.thetas, WF.ups_layout)))
-
-    # Restore original state
-    WF.ups_layout.excitation_indices = original_excitation_indices
-    WF.ups_layout.excitation_operator_type = original_excitation_types
-    WF.ups_layout.n_params = original_n_params
-    WF._thetas = original_thetas
-    WF.ci_coeffs = original_ci_coeffs
+        pool_WF.thetas = current_thetas
+        energies.append(float(expectation_value(pool_WF.ci_coeffs, [H], pool_WF.ci_coeffs, pool_WF.ci_info, pool_WF.thetas, pool_WF.ups_layout)))
 
     WF.num_energy_evals += 4  # adding rotoselect energy evaluations
     # global minimum with companion matrix method --> TO DO: parallelize
