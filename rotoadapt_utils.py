@@ -26,7 +26,7 @@ def pool(WF, so_ir, generalized):
     }
 
     ## GENERALIZED vs P-H excitation pool -> first layer always P-H since HF is always reference
-    if generalized == True and WF.ups_layout.n_params > 0:
+    if generalized == True:
 
         ## Generate indeces for singly-excited operators
         for a, i in iterate_t1_generalized(WF.num_spin_orbs):
