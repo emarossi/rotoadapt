@@ -19,17 +19,6 @@ def pool(WF, so_ir, generalized):
     Returns
         pool_data: pool data with symmetry allowed excitations
     '''
-    '''
-    Defines the excitation pool and implements symmetry filter.
-
-    Arguments
-        WF: SlowQuant wave function object
-        so_ir: list of irreducible representation labels for each spin orbital
-        generalized: generalized pool or not?->Bool
-
-    Returns
-        pool_data: pool data with symmetry allowed excitations
-    '''
     pool_data = {
     "excitation indeces": [],
     "excitation type": [],
@@ -284,7 +273,9 @@ def pool_evaluator(WF, pool_index, H, pool_data, E_prev):
     WF._thetas = original_thetas
     WF.ci_coeffs = original_ci_coeffs
 
-    # Find global minimum using companion matrix method
+    WF.num_energy_evals += 4  # adding rotoselect energy evaluations
+    # global minimum with companion matrix method --> TO DO: parallelize
+
     Thetas = np.array(thetas)
     Energies = np.array(energies)
 
