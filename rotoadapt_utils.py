@@ -73,7 +73,11 @@ def pool(WF, so_ir, generalized):
 
             i, a = excitation
 
-            if so_ir[i] != so_ir[a]:
+            if so_ir[i] == so_ir[a]:
+                print(f'IN: {excitation} - representation: {so_ir}')  
+
+            else:
+                print(f'OUT: {excitation} - representation: {so_ir}')  
                 del pool_data["excitation indeces"][num]
                 del pool_data["excitation type"][num]
                 del pool_data["excitation operator"][num]
@@ -82,11 +86,14 @@ def pool(WF, so_ir, generalized):
 
             i, j, a, b = excitation
 
-            if (so_ir[i] != so_ir[a] != so_ir[j] != so_ir[b]
-                or so_ir[i] != so_ir[j] and so_ir[a] != so_ir[b]
-                or so_ir[i] != so_ir[a] and so_ir[j] != so_ir[b]
-                or so_ir[i] != so_ir[b] and so_ir[j] != so_ir[a]):
+            if (so_ir[i] == so_ir[a] == so_ir[j] == so_ir[b]
+                or so_ir[i] == so_ir[j] and so_ir[a] == so_ir[b]
+                or so_ir[i] == so_ir[a] and so_ir[j] == so_ir[b]
+                or so_ir[i] == so_ir[b] and so_ir[j] == so_ir[a]):
+                print(f'IN: {excitation} - representation: {so_ir}')
 
+            else:  
+                print(f'OUT: {excitation} - representation: {so_ir}')
                 del pool_data["excitation indeces"][num]
                 del pool_data["excitation type"][num]
                 del pool_data["excitation operator"][num]
@@ -276,7 +283,9 @@ def pool_evaluator(WF, pool_index, H, pool_data, E_prev):
     WF._thetas = original_thetas
     WF.ci_coeffs = original_ci_coeffs
 
-    # Find global minimum using companion matrix method
+    WF.num_energy_evals += 4  # adding rotoselect energy evaluations
+    # global minimum with companion matrix method --> TO DO: parallelize
+
     Thetas = np.array(thetas)
     Energies = np.array(energies)
 
