@@ -8,13 +8,24 @@ from slowquant.unitary_coupled_cluster.util import iterate_t1, iterate_t2, itera
 from slowquant.unitary_coupled_cluster.operators import G1, G2
 
 def pool(WF, so_ir, generalized):
+    '''
+    Defines the excitation pool and implements symmetry filter.
 
+    Arguments
+        WF: SlowQuant wave function object
+        so_ir: list of irreducible representation labels for each spin orbital
+        generalized: generalized pool or not?->Bool
+
+    Returns
+        pool_data: pool data with symmetry allowed excitations
+    '''
     pool_data = {
     "excitation indeces": [],
     "excitation type": [],
     "excitation operator": []
     }
 
+    ## GENERALIZED vs P-H excitation pool -> first layer always P-H since HF is always reference
     if generalized == True and WF.ups_layout.n_params > 0:
 
         ## Generate indeces for singly-excited operators
@@ -43,9 +54,9 @@ def pool(WF, so_ir, generalized):
             pool_data["excitation type"].append("double")
             pool_data["excitation operator"].append(G2(i, j, a, b, True))
 
-    # Symmetry pruning
+    # Pruning away symmetry-forbidden excitations
 
-    for excitation in pool_data["excitation indeces"]:
+    for num, excitation in enumerate(pool_data["excitation indeces"]):
 
         if len(excitation) == 2:
 
@@ -56,7 +67,9 @@ def pool(WF, so_ir, generalized):
 
             else:
                 print(f'OUT: {excitation} - representation: {so_ir}')  
-                pool_data['excitation indeces'].remove(excitation)
+                del pool_data["excitation indeces"][num]
+                del pool_data["excitation type"][num]
+                del pool_data["excitation operator"][num]
 
         if len(excitation) == 4:
 
@@ -70,8 +83,10 @@ def pool(WF, so_ir, generalized):
 
             else:  
                 print(f'OUT: {excitation} - representation: {so_ir}')
-                pool_data['excitation indeces'].remove(excitation) 
-            
+                del pool_data["excitation indeces"][num]
+                del pool_data["excitation type"][num]
+                del pool_data["excitation operator"][num]
+
     return pool_data
 
 def energy_landscape(A, B, C, D, E, theta):
@@ -257,7 +272,9 @@ def pool_evaluator(WF, pool_index, H, pool_data, E_prev):
     WF._thetas = original_thetas
     WF.ci_coeffs = original_ci_coeffs
 
-    # Find global minimum using companion matrix method
+    WF.num_energy_evals += 4  # adding rotoselect energy evaluations
+    # global minimum with companion matrix method --> TO DO: parallelize
+
     Thetas = np.array(thetas)
     Energies = np.array(energies)
 
