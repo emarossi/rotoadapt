@@ -115,7 +115,7 @@ rdm1_traj = [WF.rdm1]
 
 pool_data = rotoadapt_utils.pool(WF, so_ir, gen)
 
-def do_adapt(WF, maxiter=10, epoch=1e-6 , orbital_opt: bool = False):
+def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
     '''Run Adapt VQE algorithm
 
     args:
@@ -143,14 +143,12 @@ def do_adapt(WF, maxiter=10, epoch=1e-6 , orbital_opt: bool = False):
         grad = []
 
         #GRADIENTS
-        for i in range(len(pool_data["excitation type"])):
-            
-            T = pool_data["excitation operator"][i]
+        # grad = adapt_utils.gradient_parallel(WF, H_ket, pool_data)
+        for T in pool_data["excitation operator"]:
 
-            #Calculate gradient, i.e. commutator -> expectation value function input (bra, operator, ket (here Hket))
-            gr = expectation_value(WF.ci_coeffs, [T], H_ket,
+            gr = expectation_value(WF.ci_coeffs,[T],  H_ket,
                                 WF.ci_info, WF.thetas, WF.ups_layout)
-            gr -= expectation_value(H_ket, [T], WF.ci_coeffs,
+            gr -= expectation_value(H_ket,[T],  WF.ci_coeffs,
                                 WF.ci_info, WF.thetas, WF.ups_layout)
             grad.append(gr)
         
@@ -198,8 +196,8 @@ def do_adapt(WF, maxiter=10, epoch=1e-6 , orbital_opt: bool = False):
         # np.append(WF._thetas, 0.0)
 
         # VQE optimization
-        # WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=False)  # full VQE optimization
-        WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=True)    # Optimize only last unitary
+        WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=False)  # full VQE optimization
+        # WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=True)    # Optimize only last unitary
 
         deltaE_adapt = np.abs(cas_en-WF.energy_elec)
         rdm1_traj.append(WF.rdm1)
@@ -241,7 +239,7 @@ def do_adapt(WF, maxiter=10, epoch=1e-6 , orbital_opt: bool = False):
 
 epoch_ca = 1.6e-3
 
-WF, en_traj = do_adapt(WF, epoch=epoch_ca, maxiter=50)
+WF, en_traj = do_adapt(WF, epoch=epoch_ca, maxiter=30)
 
 import pickle
 
@@ -258,21 +256,15 @@ output = {'molecule': molecule,
           'num_metadata': {'adapt_thr': 1e-6,
                            'opt_thr': 0,
                            'opt_max_iter': 1000},
-          'ci_ref': cas_obj.e_tot-mol_obj.enuc,
-          'en_traj': np.array(en_traj),
-          'WF': WF,
+          'ci_ref': cas_obj.e_tot-mol_obj.enuc, 
+          'en_traj': np.array(en_traj), 
           'num_measures': WF.num_energy_evals
           }
 
 ## OUTPUT ONLY LAST OPTIMIZATION
-with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR_last_opt.pkl'), 'wb') as f:
-    pickle.dump(output, f)
-
-## OUTPUT FULL VQE
-# with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR.pkl'), 'wb') as f:
-with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR_last_opt.pkl'), 'wb') as f:
-    pickle.dump(output, f)
-
-## OUTPUT FULL VQE
-# with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR.pkl'), 'wb') as f:
+# with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR_last_opt.pkl'), 'wb') as f:
 #     pickle.dump(output, f)
+
+## OUTPUT FULL VQE
+with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR.pkl'), 'wb') as f:
+    pickle.dump(output, f)
