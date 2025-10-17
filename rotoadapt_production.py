@@ -119,7 +119,12 @@ output = {'molecule': molecule,
           'ci_ref': cas_obj.e_tot-mol_obj.enuc, # CASCI reference energy
           'en_traj': np.array(en_traj), # array of electronic energie shape=(#layers)
           'rdm1_traj': rdm1_traj, # rdm1 over the whole trajectory WF object
-          'num_measures': WF.num_energy_evals
+          'num_en_evals': WF.num_energy_evals,  # optimization total cost
+          'ansatz_data': {'num_layers': WF.ups_layout.n_params,
+                          'excitation_idx': WF.ups_layout.excitation_indices,
+                          'excitation_op_type': WF.ups_layout.excitation_operator_type,
+                          'thetas': WF.thetas
+                          },
           }
 
 if full_opt == True:
