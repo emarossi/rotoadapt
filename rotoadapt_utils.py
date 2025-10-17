@@ -256,7 +256,7 @@ def pool_evaluator(WF, pool_index, pool_data, E_prev):
         energies.append(WF.energy_elec)
         thetas.append((2*np.pi*l)/5.5)
 
-    WF.num_energy_evals += 4  # adding rotoselect energy evaluations
+    # WF.num_energy_evals += 4  # adding rotoselect energy evaluations
 
     Thetas = np.array(thetas)
     Energies = np.array(energies)
@@ -458,7 +458,8 @@ def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_thresh
 
     Returns
         WF: final wave function object from SlowQuant
-        en_traj: energy optimization trajectory    
+        en_traj: energy optimization trajectory
+        rdm1_traj: rdm1 at each layer    
     '''
     # Defining the excitation pool
     excitation_pool = pool_data["excitation indeces"]
@@ -530,7 +531,6 @@ def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_thresh
             rdm1_traj.append(WF.rdm1)            
             E_prev_adapt = float(energy_pool[op_index])  # with respect to previous layer
 
-
     return WF, en_traj, rdm1_traj
 
 def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_threshold for chemical accuracy
@@ -546,7 +546,8 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
 
     Returns
         WF: final wave function object from SlowQuant
-        en_traj: energy optimization trajectory    
+        en_traj: energy optimization trajectory
+        rdm1_traj: rdm1 at each layer        
     '''
     # Defining the excitation pool
     excitation_pool = pool_data["excitation indeces"]
