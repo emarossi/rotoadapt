@@ -230,6 +230,7 @@ def optimizer(thetas, energies):
     return theta_min, energy_min
 
 def pool_evaluator(WF, pool_index, pool_data, E_prev):
+def pool_evaluator(WF, pool_index, pool_data, E_prev):
     '''
     Extends ansatz with candidate unitary from pool
     Finds global minimum using companion matrix method
@@ -248,41 +249,23 @@ def pool_evaluator(WF, pool_index, pool_data, E_prev):
     excitation_pool = pool_data["excitation indeces"]
     excitation_pool_type = pool_data["excitation type"]
 
-    # Store original state to restore later
-    original_excitation_indices = WF.ups_layout.excitation_indices.copy()
-    original_excitation_types = WF.ups_layout.excitation_operator_type.copy()
-    original_n_params = WF.ups_layout.n_params
-    original_thetas = WF._thetas.copy()
-    original_ci_coeffs = WF.ci_coeffs.copy()
+    # Updating last layer with the pool candidate
+    WF.ups_layout.excitation_indices[-1] = excitation_pool[pool_index]
+    WF.ups_layout.excitation_operator_type[-1] = excitation_pool_type[pool_index]
 
-    # Temporarily add one unitary to the layout
-    WF.ups_layout.excitation_indices.append(np.array(excitation_pool[pool_index])-WF.num_inactive_spin_orbs)
-    WF.ups_layout.excitation_operator_type.append(excitation_pool_type[pool_index])
-    WF.ups_layout.n_params += 1
-    WF._thetas.append(0.0)
-    WF.ci_coeffs = construct_ups_state(WF.ci_coeffs, WF.ci_info, WF.thetas, WF.ups_layout)
+    # Energy measurements to build system of equations
+    energies = [E_prev]
+    thetas = [0.0]
 
-    # Evaluate energy landscape at different theta values
-    energies = []
-    thetas = []
-
-    for l in range(0,5):
-        current_thetas = WF.thetas.copy()
-        current_thetas[-1] += (2*np.pi*l)/5.5
-        thetas.append(current_thetas[-1])
-        
-        # Temporarily set the theta
+    for l in range(1,5):
+        current_thetas = WF.thetas
+        current_thetas[-1] = (2*np.pi*l)/5.5
         WF.thetas = current_thetas
-        energies.append(float(expectation_value(WF.ci_coeffs, [H], WF.ci_coeffs, WF.ci_info, WF.thetas, WF.ups_layout)))
+        energies.append(WF.energy_elec)
+        thetas.append((2*np.pi*l)/5.5)
 
-    # Restore original state
-    WF.ups_layout.excitation_indices = original_excitation_indices
-    WF.ups_layout.excitation_operator_type = original_excitation_types
-    WF.ups_layout.n_params = original_n_params
-    WF._thetas = original_thetas
-    WF.ci_coeffs = original_ci_coeffs
+    WF.num_energy_evals += 4  # adding rotoselect energy evaluations
 
-    # Find global minimum using companion matrix method
     Thetas = np.array(thetas)
     Energies = np.array(energies)
 
@@ -654,6 +637,8 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
 
             # Running an optimization
             WF.run_wf_optimization_1step("slsqp", orbital_optimization=False)
+            
+            # Appending energy to trajectory and updating 'previous' energy for next iteration
             
             # Appending energy to trajectory and updating 'previous' energy for next iteration
             en_traj.append(WF.energy_elec)

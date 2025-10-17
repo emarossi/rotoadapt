@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import argparse
 import os
 import pickle
+import pickle
 
 # Utilities
 from slowquant.molecularintegrals.integralfunctions import one_electron_integral_transform, two_electron_integral_transform
@@ -29,6 +30,7 @@ parser = argparse.ArgumentParser(description="rodoadapt script - returns energy 
 parser.add_argument("--mol", type=str, required = True, help="Molecule (H2O, LiH)")
 parser.add_argument("--AS", type=int, nargs=2, required = True, help="Active space nEL nMO")
 parser.add_argument("--gen", type=bool, default = False, help="Generalized excitation operators")
+parser.add_argument("--full_opt", type=bool, default = False, help="full VQE optimization")
 parser.add_argument("--full_opt", type=bool, default = False, help="full VQE optimization")
 
 # Parse arguments
@@ -105,8 +107,6 @@ WF.num_energy_evals = 0
 
 en_traj = [hf_obj.energy_tot()-mol_obj.enuc]
 rdm1_traj = [WF.rdm1]
-
-pool_data = rotoadapt_utils.pool(WF, so_ir, gen)
 
 
 def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
@@ -275,12 +275,9 @@ epoch_ca = 1.6e-3
 WF, en_traj, rdm1_traj = do_adapt(WF, epoch=epoch_ca, maxiter=30)
 
 output = {'molecule': molecule,
-          'num_metadata': {'adapt_thr': 1e-6,
-                           'opt_thr': 0,
-                           'opt_max_iter': 1000},
-          'ci_ref': cas_obj.e_tot-mol_obj.enuc,
-          'en_traj': np.array(en_traj),
-          'WF': WF,
+          'ci_ref': cas_obj.e_tot-mol_obj.enuc, # CASCI reference energy
+          'en_traj': np.array(en_traj), # array of electronic energie shape=(#layers)
+          'rdm1_traj': rdm1_traj, # rdm1 over the whole trajectory WF object
           'num_measures': WF.num_energy_evals
           }
 
