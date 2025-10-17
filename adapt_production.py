@@ -3,6 +3,7 @@ from pyscf import gto, scf
 import matplotlib.pyplot as plt
 import argparse
 import os
+import pickle
 
 # Utilities
 from slowquant.molecularintegrals.integralfunctions import one_electron_integral_transform, two_electron_integral_transform
@@ -28,9 +29,7 @@ parser = argparse.ArgumentParser(description="rodoadapt script - returns energy 
 parser.add_argument("--mol", type=str, required = True, help="Molecule (H2O, LiH)")
 parser.add_argument("--AS", type=int, nargs=2, required = True, help="Active space nEL nMO")
 parser.add_argument("--gen", type=bool, default = False, help="Generalized excitation operators")
-parser.add_argument("--adapt_thr", type=float, default=5e-6, help="adapt layer threshold")
-parser.add_argument("--opt_thr", type=float, default=1e-5, help="adapt optimization threshold")
-parser.add_argument("--opt_max_iter", type=float, default=20, help="max number of optimization cycles")
+parser.add_argument("--full_opt", type=bool, default = False, help="full VQE optimization")
 
 # Parse arguments
 args = parser.parse_args()
@@ -38,9 +37,7 @@ args = parser.parse_args()
 molecule = args.mol  # molecule specifics via string
 AS = args.AS  # active space (nEL, nMO)
 gen = args.gen
-adapt_thr = args.adapt_thr
-opt_thr = args.opt_thr
-max_iter = args.opt_max_iter
+full_opt = args.full_opt
 
 # Getting path to current and parent folder
 parent_folder = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
@@ -100,6 +97,7 @@ WF = WaveFunctionUPS(
     )
 
 en_traj = [hf_obj.energy_tot()-mol_obj.enuc]
+rdm1_traj = [WF.rdm1]
 
 pool_data = adapt_utils.pool(WF, so_ir, gen)
 
@@ -184,14 +182,23 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
         # np.append(WF._thetas, 0.0)
 
         # VQE optimization
-        WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=False)  # full VQE optimization
-        # WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=True)    # Optimize only last unitary
+        if full_opt == True:
+            WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=False) # full VQE optimization
+
+        if full_opt == False:
+            WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=True) # Optimize only last unitary
 
         deltaE_adapt = np.abs(cas_en-WF.energy_elec)
+        rdm1_traj.append(WF.rdm1)
 
         if deltaE_adapt < epoch:
             en_traj.append(WF.energy_elec)
-            print(f'FINAL RESULT - Energy: {WF.energy_elec} - Delta: {deltaE_adapt}')
+            # Final printout
+            print('----------------------')
+            print(f'FINAL RESULT - Energy: {en_traj[-1]} - #Layers: {WF.ups_layout.n_params}')
+            print('EXCITATION SEQUENCE')
+            for i, (op_idx, op_type) in enumerate(zip(WF.ups_layout.excitation_indices, WF.ups_layout.excitation_operator_type)):
+                print(f'LAYER {i}: {op_idx} | {op_type}')
             break
 
         else:
@@ -215,29 +222,27 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
     print("------TP  Number of Loop", end = " ")
     print(nloop)
 
-    return WF, en_traj
+    return WF, en_traj, rdm1_traj
 
 # Define epoch for chemical accuracy
 
 epoch_ca = 1.6e-3
 
-WF, en_traj = do_adapt(WF, epoch=epoch_ca, maxiter=30)
-
-import pickle
+WF, en_traj, rdm1_traj = do_adapt(WF, epoch=epoch_ca, maxiter=30)
 
 output = {'molecule': molecule,
-          'num_metadata': {'adapt_thr': 1e-6, 
-                           'opt_thr': 0, 
-                           'opt_max_iter': 1000},
-          'ci_ref': cas_obj.e_tot-mol_obj.enuc, 
-          'en_traj': np.array(en_traj), 
+          'ci_ref': cas_obj.e_tot-mol_obj.enuc, # CASCI reference energy
+          'en_traj': np.array(en_traj), # array of electronic energie shape=(#layers)
+          'rdm1_traj': rdm1_traj, # rdm1 over the whole trajectory WF object
           'num_measures': WF.num_energy_evals
           }
 
 ## OUTPUT ONLY LAST OPTIMIZATION
-# with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR_last_opt.pkl'), 'wb') as f:
-#     pickle.dump(output, f)
 
-## OUTPUT FULL VQE
-with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR.pkl'), 'wb') as f:
-    pickle.dump(output, f)
+if full_opt == True:
+    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR.pkl'), 'wb') as f:
+        pickle.dump(output, f)
+
+if full_opt == False:
+    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR_last_opt.pkl'), 'wb') as f:
+        pickle.dump(output, f)    
