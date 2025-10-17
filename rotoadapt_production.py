@@ -3,6 +3,7 @@ from pyscf import gto, scf
 import argparse
 import os
 import pickle
+import pickle
 
 # Utilities
 from slowquant.molecularintegrals.integralfunctions import one_electron_integral_transform, two_electron_integral_transform
@@ -109,17 +110,6 @@ WF = WaveFunctionUPS(
         include_active_kappa=True,
     )
 
-# Add energy evaluation counter attribute
-WF.num_energy_evals = 0
-
-# Define Hamiltonian
-H = hamiltonian_0i_0a(
-    WF.h_mo,
-    WF.g_mo,
-    WF.num_inactive_orbs,
-    WF.num_active_orbs
-)
-
 ## DEFINE EXCITATION POOL -> dictionary with data
 
 pool_data = {
@@ -163,31 +153,26 @@ for a, i, b, j in iterate_t2(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
 
 # Add Rotomeasurements
 
-WF, en_traj = rotoadapt_utils.rotoselect_opt(WF, H, pool_data, cas_en)    # rotoselect + full VQE optimzation
-# WF, en_traj = rotoadapt_utils.rotoselect(WF, H, pool_data, cas_en)  # rotoselect - no optimization
+if full_opt == True:
+    WF, en_traj, rdm1_traj = rotoadapt_utils.rotoselect_opt(WF, pool_data, cas_en)    # rotoselect + full VQE optimzation
+
+if full_opt == False:
+    WF, en_traj, rdm1_traj = rotoadapt_utils.rotoselect(WF, pool_data, cas_en)  # rotoselect - no optimization
 
 # SAVING RELEVANT OBJECTS
 
-import pickle
-
-# Create pickleable WF object representation
-wf_data = {
-    'num_params': WF.ups_layout.n_params,
-    'excitation_indices': [idx.tolist() if hasattr(idx, 'tolist') else idx for idx in WF.ups_layout.excitation_indices],
-    'excitation_types': WF.ups_layout.excitation_operator_type,
-    'thetas': WF.thetas.copy(),
-    'final_energy': WF.energy_elec
-}
-
 output = {'molecule': molecule,
           'ci_ref': cas_obj.e_tot-mol_obj.enuc, # CASCI reference energy
+          'ci_ref': cas_obj.e_tot-mol_obj.enuc, # CASCI reference energy
           'en_traj': np.array(en_traj), # array of electronic energie shape=(#layers)
-          'wf_data': wf_data, # Essential WF information instead of full object
+          'rdm1_traj': rdm1_traj, # rdm1 over the whole trajectory WF object
           'num_measures': WF.num_energy_evals
           }
 
-with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT.pkl'), 'wb') as f:
-    pickle.dump(output, f)
+if full_opt == True:
+    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT.pkl'), 'wb') as f:
+        pickle.dump(output, f)
 
-# with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS.pkl'), 'wb') as f:
-#     pickle.dump(output, f)
+if full_opt == False:
+    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS.pkl'), 'wb') as f:
+        pickle.dump(output, f)
