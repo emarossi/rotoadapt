@@ -218,8 +218,7 @@ def optimizer(thetas, energies):
 
     return theta_min, energy_min
 
-def pool_evaluator(WF, pool_index, H, pool_data, E_prev):
-def pool_evaluator(WF, pool_index, H, pool_data, E_prev):
+def pool_evaluator(WF, pool_index, pool_data, E_prev):
     '''
     Extends ansatz with candidate unitary from pool
     Finds global minimum using companion matrix method
@@ -238,43 +237,22 @@ def pool_evaluator(WF, pool_index, H, pool_data, E_prev):
     excitation_pool = pool_data["excitation indeces"]
     excitation_pool_type = pool_data["excitation type"]
 
-    # Store original state to restore later
-    original_excitation_indices = WF.ups_layout.excitation_indices.copy()
-    original_excitation_types = WF.ups_layout.excitation_operator_type.copy()
-    original_n_params = WF.ups_layout.n_params
-    original_thetas = WF._thetas.copy()
-    original_ci_coeffs = WF.ci_coeffs.copy()
+    # Updating last layer with the pool candidate
+    WF.ups_layout.excitation_indices[-1] = excitation_pool[pool_index]
+    WF.ups_layout.excitation_operator_type[-1] = excitation_pool_type[pool_index]
 
-    # Temporarily add one unitary to the layout
-    WF.ups_layout.excitation_indices.append(np.array(excitation_pool[pool_index])-WF.num_inactive_spin_orbs)
-    WF.ups_layout.excitation_operator_type.append(excitation_pool_type[pool_index])
-    WF.ups_layout.n_params += 1
-    WF._thetas.append(0.0)
-    WF.ci_coeffs = construct_ups_state(WF.ci_coeffs, WF.ci_info, WF.thetas, WF.ups_layout)
-
-    # global minimum with companion matrix method --> TO DO: parallelize
-
+    # Energy measurements to build system of equations
     energies = [E_prev]
     thetas = [0.0]
 
     for l in range(1,5):
-        current_thetas = pool_WF.thetas
-        current_thetas[-1] += (2*np.pi*l)/5.5
-        thetas.append(current_thetas[-1])
-        
-        # Temporarily set the theta
+        current_thetas = WF.thetas
+        current_thetas[-1] = (2*np.pi*l)/5.5
         WF.thetas = current_thetas
-        energies.append(float(expectation_value(WF.ci_coeffs, [H], WF.ci_coeffs, WF.ci_info, WF.thetas, WF.ups_layout)))
-
-    # Restore original state
-    WF.ups_layout.excitation_indices = original_excitation_indices
-    WF.ups_layout.excitation_operator_type = original_excitation_types
-    WF.ups_layout.n_params = original_n_params
-    WF._thetas = original_thetas
-    WF.ci_coeffs = original_ci_coeffs
+        energies.append(WF.energy_elec)
+        thetas.append((2*np.pi*l)/5.5)
 
     WF.num_energy_evals += 4  # adding rotoselect energy evaluations
-    # global minimum with companion matrix method --> TO DO: parallelize
 
     Thetas = np.array(thetas)
     Energies = np.array(energies)
@@ -485,13 +463,13 @@ def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_thresh
 
     # Initialize previous energy and energy trajectory (here with HF energy)
     E_prev_adapt = float(WF.energy_elec)
+    E_prev_adapt = float(WF.energy_elec)
     en_traj = [E_prev_adapt]
     rdm1_traj = [WF.rdm1]
-    rdm2_traj = [WF.rdm2]
 
     converged = False
 
-    while converged == False and WF.ups_layout.n_params <= 50:
+    while converged == False:
 
         # Load new operator in the ansatz and initialize
         WF.ups_layout.excitation_indices.append((0,0))
@@ -502,7 +480,10 @@ def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_thresh
         results = []
 
         # Looping through pool operator -> get the best ansatz
-        results = pool_parallel(WF, H, pool_data, E_prev_adapt)
+        for i in range(len(excitation_pool)):
+            results.append(pool_evaluator(WF, i, pool_data, E_prev_adapt))
+
+        # results = pool_parallel(WF, H, pool_data, E_prev_adapt)
         theta_pool, energy_pool = zip(*results)
 
         op_index = np.argmin(energy_pool)
@@ -524,8 +505,14 @@ def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_thresh
             # Appending energy and termination
             en_traj.append(float(energy_pool[op_index]))
             rdm1_traj.append(WF.rdm1)
-            rdm2_traj.append(WF.rdm2)
             converged = True
+
+            # Final printout
+            print('----------------------')
+            print(f'FINAL RESULT - Energy: {en_traj[-1]} - #Layers: {WF.ups_layout.n_params}')
+            print('EXCITATION SEQUENCE')
+            for i, (op_idx, op_type) in enumerate(zip(WF.ups_layout.excitation_indices, WF.ups_layout.excitation_operator_type)):
+                print(f'LAYER {i}: {op_idx} | {op_type}')
 
             # Final printout
             print('----------------------')
@@ -545,11 +532,11 @@ def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_thresh
             # Appending energy to trajectory and updating 'previous' energy for next iteration
             print(f'RESULT at layer {WF.ups_layout.n_params} - Energy: {energy_pool[op_index]} - Previous: {E_prev_adapt} - Delta: {deltaE_adapt} - Theta: {theta_pool[op_index]}')
             en_traj.append(float(energy_pool[op_index]))
-            rdm1_traj.append(WF.rdm1)
-            rdm2_traj.append(WF.rdm2)            
+            rdm1_traj.append(WF.rdm1)            
             E_prev_adapt = float(energy_pool[op_index])  # with respect to previous layer
 
-    return WF, en_traj, rdm1_traj, rdm2_traj
+
+    return WF, en_traj, rdm1_traj
 
 def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_threshold for chemical accuracy
     '''
@@ -573,16 +560,26 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
 
     # Initialize previous energy and energy trajectory (here with HF energy)
     E_prev_adapt = float(WF.energy_elec)
+    E_prev_adapt = float(WF.energy_elec)
     en_traj = [E_prev_adapt]
     rdm1_traj = [WF.rdm1]
-    rdm2_traj = [WF.rdm2]
 
     converged = False
 
     while converged == False and WF.ups_layout.n_params <= 50:
 
-        # Looping through pool operator -> get the best ansatz
-        results = pool_parallel(WF, H, pool_data, E_prev_adapt)
+        # Load new operator slot in the ansatz
+        WF.ups_layout.excitation_indices.append((0,0))
+        WF.ups_layout.excitation_operator_type.append(" ")
+        WF.ups_layout.n_params += 1
+        WF._thetas.append(0.0)
+
+        results = []
+
+        for i in range(len(excitation_pool)):
+            results.append(pool_evaluator(WF, i, pool_data, E_prev_adapt))
+
+        # results = pool_parallel(WF, H, pool_data, E_prev_adapt)
         theta_pool, energy_pool = zip(*results)
         op_index = np.argmin(energy_pool)
 
@@ -603,8 +600,13 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
             # Appending energy and termination (before full optimization)
             en_traj.append(float(energy_pool[op_index]))
             rdm1_traj.append(WF.rdm1)
-            rdm2_traj.append(WF.rdm2)
             converged = True
+            print('----------------------')
+            print(f'FINAL RESULT - Energy: {en_traj[-1]} - #Layers: {WF.ups_layout.n_params}')
+            print('EXCITATION SEQUENCE')
+            for i, (op_idx, op_type) in enumerate(zip(WF.ups_layout.excitation_indices, WF.ups_layout.excitation_operator_type)):
+                print(f'LAYER {i}: {op_idx} | {op_type}')
+        
             print('----------------------')
             print(f'FINAL RESULT - Energy: {en_traj[-1]} - #Layers: {WF.ups_layout.n_params}')
             print('EXCITATION SEQUENCE')
@@ -623,14 +625,22 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
             WF.run_wf_optimization_1step("slsqp", orbital_optimization=False)
             
             # Appending energy to trajectory and updating 'previous' energy for next iteration
+            
+            # Appending energy to trajectory and updating 'previous' energy for next iteration
             en_traj.append(WF.energy_elec)
             deltaE_adapt = np.abs(cas_en-en_traj[-1])            
 
             # Checking convergence to chemical accuracy
             if deltaE_adapt < adapt_threshold:
                 rdm1_traj.append(WF.rdm1)
-                rdm2_traj.append(WF.rdm2)
                 converged = True
+
+                # Final printout
+                print('----------------------')
+                print(f'FINAL RESULT - Energy: {en_traj[-1]} - #Layers: {WF.ups_layout.n_params}')
+                print('EXCITATION SEQUENCE')
+                for i, (op_idx, op_type) in enumerate(zip(WF.ups_layout.excitation_indices, WF.ups_layout.excitation_operator_type)):
+                    print(f'LAYER {i}: {op_idx} | {op_type}')
 
                 # Final printout
                 print('----------------------')
@@ -641,8 +651,8 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
 
             else:
                 rdm1_traj.append(WF.rdm1)
-                rdm2_traj.append(WF.rdm2)
                 print(f'RESULT at layer {WF.ups_layout.n_params} - Energy: {WF.energy_elec} - Previous: {E_prev_adapt} - Delta: {deltaE_adapt} - Theta: {theta_pool[op_index]}')
                 E_prev_adapt = en_traj[-1]
+                E_prev_adapt = en_traj[-1]
 
-    return WF, en_traj, rdm1_traj, rdm2_traj
+    return WF, en_traj, rdm1_traj
