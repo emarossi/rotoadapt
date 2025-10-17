@@ -31,7 +31,6 @@ parser.add_argument("--mol", type=str, required = True, help="Molecule (H2O, LiH
 parser.add_argument("--AS", type=int, nargs=2, required = True, help="Active space nEL nMO")
 parser.add_argument("--gen", type=bool, default = False, help="Generalized excitation operators")
 parser.add_argument("--full_opt", type=bool, default = False, help="full VQE optimization")
-parser.add_argument("--full_opt", type=bool, default = False, help="full VQE optimization")
 
 # Parse arguments
 args = parser.parse_args()

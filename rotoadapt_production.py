@@ -156,11 +156,6 @@ if full_opt == True:
 
 if full_opt == False:
     WF, en_traj, rdm1_traj = rotoadapt_utils.rotoselect(WF, pool_data, cas_en)  # rotoselect - no optimization
-if full_opt == True:
-    WF, en_traj, rdm1_traj = rotoadapt_utils.rotoselect_opt(WF, pool_data, cas_en)    # rotoselect + full VQE optimzation
-
-if full_opt == False:
-    WF, en_traj, rdm1_traj = rotoadapt_utils.rotoselect(WF, pool_data, cas_en)  # rotoselect - no optimization
 
 # SAVING RELEVANT OBJECTS
 

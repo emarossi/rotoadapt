@@ -230,7 +230,6 @@ def optimizer(thetas, energies):
     return theta_min, energy_min
 
 def pool_evaluator(WF, pool_index, pool_data, E_prev):
-def pool_evaluator(WF, pool_index, pool_data, E_prev):
     '''
     Extends ansatz with candidate unitary from pool
     Finds global minimum using companion matrix method
