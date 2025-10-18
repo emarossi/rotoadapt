@@ -458,7 +458,7 @@ def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_thresh
 
     converged = False
 
-    while converged == False:
+    while converged == False and WF.ups_layout.n_params <= 50:
 
         # Load new operator in the ansatz and initialize
         WF.ups_layout.excitation_indices.append((0,0))
