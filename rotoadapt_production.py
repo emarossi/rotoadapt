@@ -55,7 +55,12 @@ if molecule == 'LiH':
     geometry = 'H 0.000000 0.000000 0.000000; Li 3.0000 0.00000 0.000000' #LiH stretched
 
 if molecule == 'N2':
-    geometry = 'N 0.000000 0.000000 0.000000; N 2.0980 0.00000 0.000000' #N2 stretched
+    geometry = 'N 0.000000 0.000000 0.000000; N 1.0980 0.00000 0.000000' #N2 equilibrium
+    # geometry = 'N 0.000000 0.000000 0.000000; N 2.0980 0.00000 0.000000' #N2 stretched
+
+if molecule == 'BeH2':
+    # geometry = 'Be 0.000000 0.000000 0.000000; H 1.34000 0.00000 0.000000; H -1.34000 0.00000 0.000000' #BeH2 equilibrium
+    geometry = 'Be 0.000000 0.000000 0.000000; H 2.34000 0.00000 0.000000; H -2.34000 0.00000 0.000000' #BeH2 stretched
 
 mol_obj = gto.Mole()
 mol_obj.build(atom = geometry, basis = 'sto-3g', symmetry='c2v')
@@ -74,6 +79,7 @@ cas_obj = hf_obj.CASCI(nMO, nEL)
 cas_obj.kernel()
 
 cas_en = cas_obj.e_tot-mol_obj.enuc
+cas_rdm1 = cas_obj.make_rdm1()
 
 print(f'Energy HF: {hf_obj.energy_tot()-mol_obj.enuc}, Energy CAS: {cas_en}')
 
@@ -108,17 +114,20 @@ pool_data = rotoadapt_utils.pool(WF, so_ir, gen)
 # Add Rotomeasurements
 
 if full_opt == True:
-    WF, en_traj, rdm1_traj = rotoadapt_utils.rotoselect_opt(WF, pool_data, cas_en)    # rotoselect + full VQE optimzation
+    WF, en_traj, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect_opt(WF, pool_data, cas_en)    # rotoselect + full VQE optimzation
 
 if full_opt == False:
-    WF, en_traj, rdm1_traj = rotoadapt_utils.rotoselect(WF, pool_data, cas_en)  # rotoselect - no optimization
+    WF, en_traj, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect(WF, pool_data, cas_en)  # rotoselect - no optimization
 
 # SAVING RELEVANT OBJECTS
 
 output = {'molecule': molecule,
-          'ci_ref': cas_obj.e_tot-mol_obj.enuc, # CASCI reference energy
+          'ref_data': {'en_ref': cas_obj.e_tot-mol_obj.enuc,
+                       'rdm1_ref': cas_rdm1
+                       }, # CASCI reference data
           'en_traj': np.array(en_traj), # array of electronic energie shape=(#layers)
           'rdm1_traj': rdm1_traj, # rdm1 over the whole trajectory WF object
+          'rdm2_traj': rdm2_traj, # rdm1 over the whole trajectory WF object
           'num_en_evals': WF.num_energy_evals,  # optimization total cost
           'ansatz_data': {'num_layers': WF.ups_layout.n_params,
                           'excitation_idx': WF.ups_layout.excitation_indices,
@@ -128,8 +137,14 @@ output = {'molecule': molecule,
           }
 
 if full_opt == True:
-    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT.pkl'), 'wb') as f:
-        pickle.dump(output, f)
+
+    if gen == False:
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT.pkl'), 'wb') as f:
+            pickle.dump(output, f)
+
+    if gen == True:
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT-gen.pkl'), 'wb') as f:
+            pickle.dump(output, f)
 
 if full_opt == False:
     with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS.pkl'), 'wb') as f:

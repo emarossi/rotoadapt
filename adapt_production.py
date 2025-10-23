@@ -56,6 +56,10 @@ if molecule == 'LiH':
 if molecule == 'N2':
     geometry = 'N 0.000000 0.000000 0.000000; N 2.0980 0.00000 0.000000' #N2 stretched
 
+if molecule == 'BeH2':
+    # geometry = 'Be 0.000000 0.000000 0.000000; H 1.34000 0.00000 0.000000; H -1.34000 0.00000 0.000000' #BeH2 equilibrium
+    geometry = 'Be 0.000000 0.000000 0.000000; H 2.34000 0.00000 0.000000; H -2.34000 0.00000 0.000000' #BeH2 stretched
+
 
 mol_obj = gto.Mole()
 mol_obj.build(atom = geometry, basis = 'sto-3g', symmetry='c2v')
@@ -228,7 +232,7 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
 
 epoch_ca = 1.6e-3
 
-WF, en_traj, rdm1_traj = do_adapt(WF, epoch=epoch_ca, maxiter=30)
+WF, en_traj, rdm1_traj = do_adapt(WF, epoch=epoch_ca, maxiter=50)
 
 output = {'molecule': molecule,
           'ci_ref': cas_obj.e_tot-mol_obj.enuc, # CASCI reference energy
