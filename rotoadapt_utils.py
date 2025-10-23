@@ -469,6 +469,7 @@ def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_thresh
     E_prev_adapt = float(WF.energy_elec)
     en_traj = [E_prev_adapt]
     rdm1_traj = [WF.rdm1]
+    rdm2_traj = [WF.rdm2]
 
     converged = False
 
@@ -508,6 +509,7 @@ def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_thresh
             # Appending energy and termination
             en_traj.append(float(energy_pool[op_index]))
             rdm1_traj.append(WF.rdm1)
+            rdm2_traj.append(WF.rdm2)
             converged = True
 
             # Final printout
@@ -528,10 +530,11 @@ def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_thresh
             # Appending energy to trajectory and updating 'previous' energy for next iteration
             print(f'RESULT at layer {WF.ups_layout.n_params} - Energy: {energy_pool[op_index]} - Previous: {E_prev_adapt} - Delta: {deltaE_adapt} - Theta: {theta_pool[op_index]}')
             en_traj.append(float(energy_pool[op_index]))
-            rdm1_traj.append(WF.rdm1)            
+            rdm1_traj.append(WF.rdm1)
+            rdm2_traj.append(WF.rdm2)            
             E_prev_adapt = float(energy_pool[op_index])  # with respect to previous layer
 
-    return WF, en_traj, rdm1_traj
+    return WF, en_traj, rdm1_traj, rdm2_traj
 
 def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_threshold for chemical accuracy
     '''
@@ -557,6 +560,7 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
     E_prev_adapt = float(WF.energy_elec)
     en_traj = [E_prev_adapt]
     rdm1_traj = [WF.rdm1]
+    rdm2_traj = [WF.rdm2]
 
     converged = False
 
@@ -594,6 +598,7 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
             # Appending energy and termination (before full optimization)
             en_traj.append(float(energy_pool[op_index]))
             rdm1_traj.append(WF.rdm1)
+            rdm2_traj.append(WF.rdm2)
             converged = True
             print('----------------------')
             print(f'FINAL RESULT - Energy: {en_traj[-1]} - #Layers: {WF.ups_layout.n_params}')
@@ -619,6 +624,7 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
             # Checking convergence to chemical accuracy
             if deltaE_adapt < adapt_threshold:
                 rdm1_traj.append(WF.rdm1)
+                rdm2_traj.append(WF.rdm2)
                 converged = True
 
                 # Final printout
@@ -630,7 +636,8 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
 
             else:
                 rdm1_traj.append(WF.rdm1)
+                rdm2_traj.append(WF.rdm2)
                 print(f'RESULT at layer {WF.ups_layout.n_params} - Energy: {WF.energy_elec} - Previous: {E_prev_adapt} - Delta: {deltaE_adapt} - Theta: {theta_pool[op_index]}')
                 E_prev_adapt = en_traj[-1]
 
-    return WF, en_traj, rdm1_traj
+    return WF, en_traj, rdm1_traj, rdm2_traj
