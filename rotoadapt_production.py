@@ -3,7 +3,6 @@ from pyscf import gto, scf
 import argparse
 import os
 import pickle
-import pickle
 
 # Utilities
 from slowquant.molecularintegrals.integralfunctions import one_electron_integral_transform, two_electron_integral_transform
@@ -110,27 +109,7 @@ WF = WaveFunctionUPS(
 
 ## DEFINE EXCITATION POOL -> dictionary with data
 
-pool_data = {
-    "excitation indeces": [],
-    "excitation type": [],
-    "excitation operator": []
-}
-
-num_inactive_so = WF.num_inactive_spin_orbs # use it to rescale operator indeces to the active space
-
-## GENERALIZED EXCITATION
-
-## Generate indeces for singly-excited operators
-for a, i in iterate_t1_generalized(WF.num_spin_orbs):
-    pool_data["excitation indeces"].append((i, a))            
-    pool_data["excitation type"].append("single")
-    pool_data["excitation operator"].append(G1(i, a, True))
-
-## Generate indeces for doubly-excited operators
-for a, i, b, j in iterate_t2_generalized(WF.num_spin_orbs):
-    pool_data["excitation indeces"].append((i, j, a, b))
-    pool_data["excitation type"].append("double")
-    pool_data["excitation operator"].append(G2(i, j, a, b, True))
+pool_data = rotoadapt_utils.pool(WF, so_ir, gen)
 
 
 ## EXCITATION WITH RESPECT TO HF REFERENCE
@@ -152,24 +131,37 @@ for a, i, b, j in iterate_t2_generalized(WF.num_spin_orbs):
 # Add Rotomeasurements
 
 if full_opt == True:
-    WF, en_traj, rdm1_traj = rotoadapt_utils.rotoselect_opt(WF, pool_data, cas_en)    # rotoselect + full VQE optimzation
+    WF, en_traj, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect_opt(WF, pool_data, cas_en)    # rotoselect + full VQE optimzation
 
 if full_opt == False:
-    WF, en_traj, rdm1_traj = rotoadapt_utils.rotoselect(WF, pool_data, cas_en)  # rotoselect - no optimization
+    WF, en_traj, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect(WF, pool_data, cas_en)  # rotoselect - no optimization
 
 # SAVING RELEVANT OBJECTS
 
 output = {'molecule': molecule,
-          'ci_ref': cas_obj.e_tot-mol_obj.enuc, # CASCI reference energy
-          'ci_ref': cas_obj.e_tot-mol_obj.enuc, # CASCI reference energy
+          'ref_data': {'en_ref': cas_obj.e_tot-mol_obj.enuc,
+                       'rdm1_ref': cas_rdm1
+                       }, # CASCI reference data
           'en_traj': np.array(en_traj), # array of electronic energie shape=(#layers)
           'rdm1_traj': rdm1_traj, # rdm1 over the whole trajectory WF object
-          'num_measures': WF.num_energy_evals
+          'rdm2_traj': rdm2_traj, # rdm1 over the whole trajectory WF object
+          'num_en_evals': WF.num_energy_evals,  # optimization total cost
+          'ansatz_data': {'num_layers': WF.ups_layout.n_params,
+                          'excitation_idx': WF.ups_layout.excitation_indices,
+                          'excitation_op_type': WF.ups_layout.excitation_operator_type,
+                          'thetas': WF.thetas
+                          },
           }
 
 if full_opt == True:
-    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT.pkl'), 'wb') as f:
-        pickle.dump(output, f)
+
+    if gen == False:
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT.pkl'), 'wb') as f:
+            pickle.dump(output, f)
+
+    if gen == True:
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT-gen.pkl'), 'wb') as f:
+            pickle.dump(output, f)
 
 if full_opt == False:
     with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS.pkl'), 'wb') as f:

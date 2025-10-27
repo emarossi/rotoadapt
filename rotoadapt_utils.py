@@ -19,17 +19,6 @@ def pool(WF, so_ir, generalized):
     Returns
         pool_data: pool data with symmetry allowed excitations
     '''
-    '''
-    Defines the excitation pool and implements symmetry filter.
-
-    Arguments
-        WF: SlowQuant wave function object
-        so_ir: list of irreducible representation labels for each spin orbital
-        generalized: generalized pool or not?->Bool
-
-    Returns
-        pool_data: pool data with symmetry allowed excitations
-    '''
     pool_data = {
     "excitation indeces": [],
     "excitation type": [],
@@ -37,7 +26,7 @@ def pool(WF, so_ir, generalized):
     }
 
     ## GENERALIZED vs P-H excitation pool -> first layer always P-H since HF is always reference
-    if generalized == True and WF.ups_layout.n_params > 0:
+    if generalized == True:
 
         ## Generate indeces for singly-excited operators
         for a, i in iterate_t1_generalized(WF.num_spin_orbs):
@@ -73,11 +62,7 @@ def pool(WF, so_ir, generalized):
 
             i, a = excitation
 
-            if so_ir[i] == so_ir[a]:
-                print(f'IN: {excitation} - representation: {so_ir}')  
-
-            else:
-                print(f'OUT: {excitation} - representation: {so_ir}')  
+            if so_ir[i] != so_ir[a]:
                 del pool_data["excitation indeces"][num]
                 del pool_data["excitation type"][num]
                 del pool_data["excitation operator"][num]
@@ -86,14 +71,11 @@ def pool(WF, so_ir, generalized):
 
             i, j, a, b = excitation
 
-            if (so_ir[i] == so_ir[a] == so_ir[j] == so_ir[b]
-                or so_ir[i] == so_ir[j] and so_ir[a] == so_ir[b]
-                or so_ir[i] == so_ir[a] and so_ir[j] == so_ir[b]
-                or so_ir[i] == so_ir[b] and so_ir[j] == so_ir[a]):
-                print(f'IN: {excitation} - representation: {so_ir}')
+            if (so_ir[i] != so_ir[a] != so_ir[j] != so_ir[b]
+                or so_ir[i] != so_ir[j] and so_ir[a] != so_ir[b]
+                or so_ir[i] != so_ir[a] and so_ir[j] != so_ir[b]
+                or so_ir[i] != so_ir[b] and so_ir[j] != so_ir[a]):
 
-            else:  
-                print(f'OUT: {excitation} - representation: {so_ir}')
                 del pool_data["excitation indeces"][num]
                 del pool_data["excitation type"][num]
                 del pool_data["excitation operator"][num]
@@ -263,12 +245,11 @@ def pool_evaluator(WF, pool_index, pool_data, E_prev):
         energies.append(WF.energy_elec)
         thetas.append((2*np.pi*l)/5.5)
 
-    WF.num_energy_evals += 4  # adding rotoselect energy evaluations
+    # WF.num_energy_evals += 4  # adding rotoselect energy evaluations
 
     Thetas = np.array(thetas)
     Energies = np.array(energies)
 
-    # Find energy landscape and its global minimum
     # Find energy landscape and its global minimum
     theta_min, E_min = optimizer(Thetas, Energies)
 
@@ -290,11 +271,10 @@ def pool_parallel(WF, H, pool_data, E_prev):
     excitation_pool = pool_data["excitation indeces"]
     pool_idx_array = np.arange(len(excitation_pool))
 
-    # Sequential evaluation to avoid multiprocessing pickle issues
-    results = []
-    for pool_index in pool_idx_array:
-        result = pool_evaluator(WF, pool_index, H, pool_data)
-        results.append(result)
+    # mp.set_start_method("spawn", force=True)
+
+    with mp.Pool(processes=os.cpu_count()) as pool:
+        results = pool.starmap(pool_evaluator, [(WF, pool_index, H, pool_data, E_prev) for pool_index in pool_idx_array])
 
     return results
 
@@ -476,13 +456,21 @@ def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_thresh
 
     # Initialize previous energy and energy trajectory (here with HF energy)
     E_prev_adapt = float(WF.energy_elec)
-    E_prev_adapt = float(WF.energy_elec)
     en_traj = [E_prev_adapt]
     rdm1_traj = [WF.rdm1]
+    rdm2_traj = [WF.rdm2]
 
     converged = False
 
-    while converged == False:
+    while converged == False and WF.ups_layout.n_params <= 50:
+
+        # Load new operator in the ansatz and initialize
+        WF.ups_layout.excitation_indices.append((0,0))
+        WF.ups_layout.excitation_operator_type.append(" ")
+        WF.ups_layout.n_params += 1
+        WF._thetas.append(0.0)
+
+        results = []
 
         # Load new operator in the ansatz and initialize
         WF.ups_layout.excitation_indices.append((0,0))
@@ -518,14 +506,8 @@ def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_thresh
             # Appending energy and termination
             en_traj.append(float(energy_pool[op_index]))
             rdm1_traj.append(WF.rdm1)
+            rdm2_traj.append(WF.rdm2)
             converged = True
-
-            # Final printout
-            print('----------------------')
-            print(f'FINAL RESULT - Energy: {en_traj[-1]} - #Layers: {WF.ups_layout.n_params}')
-            print('EXCITATION SEQUENCE')
-            for i, (op_idx, op_type) in enumerate(zip(WF.ups_layout.excitation_indices, WF.ups_layout.excitation_operator_type)):
-                print(f'LAYER {i}: {op_idx} | {op_type}')
 
             # Final printout
             print('----------------------')
@@ -545,11 +527,11 @@ def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_thresh
             # Appending energy to trajectory and updating 'previous' energy for next iteration
             print(f'RESULT at layer {WF.ups_layout.n_params} - Energy: {energy_pool[op_index]} - Previous: {E_prev_adapt} - Delta: {deltaE_adapt} - Theta: {theta_pool[op_index]}')
             en_traj.append(float(energy_pool[op_index]))
-            rdm1_traj.append(WF.rdm1)            
+            rdm1_traj.append(WF.rdm1)
+            rdm2_traj.append(WF.rdm2)            
             E_prev_adapt = float(energy_pool[op_index])  # with respect to previous layer
 
-
-    return WF, en_traj, rdm1_traj
+    return WF, en_traj, rdm1_traj, rdm2_traj
 
 def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_threshold for chemical accuracy
     '''
@@ -573,9 +555,9 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
 
     # Initialize previous energy and energy trajectory (here with HF energy)
     E_prev_adapt = float(WF.energy_elec)
-    E_prev_adapt = float(WF.energy_elec)
     en_traj = [E_prev_adapt]
     rdm1_traj = [WF.rdm1]
+    rdm2_traj = [WF.rdm2]
 
     converged = False
 
@@ -613,13 +595,8 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
             # Appending energy and termination (before full optimization)
             en_traj.append(float(energy_pool[op_index]))
             rdm1_traj.append(WF.rdm1)
+            rdm2_traj.append(WF.rdm2)
             converged = True
-            print('----------------------')
-            print(f'FINAL RESULT - Energy: {en_traj[-1]} - #Layers: {WF.ups_layout.n_params}')
-            print('EXCITATION SEQUENCE')
-            for i, (op_idx, op_type) in enumerate(zip(WF.ups_layout.excitation_indices, WF.ups_layout.excitation_operator_type)):
-                print(f'LAYER {i}: {op_idx} | {op_type}')
-        
             print('----------------------')
             print(f'FINAL RESULT - Energy: {en_traj[-1]} - #Layers: {WF.ups_layout.n_params}')
             print('EXCITATION SEQUENCE')
@@ -638,22 +615,14 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
             WF.run_wf_optimization_1step("slsqp", orbital_optimization=False)
             
             # Appending energy to trajectory and updating 'previous' energy for next iteration
-            
-            # Appending energy to trajectory and updating 'previous' energy for next iteration
             en_traj.append(WF.energy_elec)
             deltaE_adapt = np.abs(cas_en-en_traj[-1])            
 
             # Checking convergence to chemical accuracy
             if deltaE_adapt < adapt_threshold:
                 rdm1_traj.append(WF.rdm1)
+                rdm2_traj.append(WF.rdm2)
                 converged = True
-
-                # Final printout
-                print('----------------------')
-                print(f'FINAL RESULT - Energy: {en_traj[-1]} - #Layers: {WF.ups_layout.n_params}')
-                print('EXCITATION SEQUENCE')
-                for i, (op_idx, op_type) in enumerate(zip(WF.ups_layout.excitation_indices, WF.ups_layout.excitation_operator_type)):
-                    print(f'LAYER {i}: {op_idx} | {op_type}')
 
                 # Final printout
                 print('----------------------')
@@ -664,8 +633,8 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
 
             else:
                 rdm1_traj.append(WF.rdm1)
+                rdm2_traj.append(WF.rdm2)
                 print(f'RESULT at layer {WF.ups_layout.n_params} - Energy: {WF.energy_elec} - Previous: {E_prev_adapt} - Delta: {deltaE_adapt} - Theta: {theta_pool[op_index]}')
                 E_prev_adapt = en_traj[-1]
-                E_prev_adapt = en_traj[-1]
 
-    return WF, en_traj, rdm1_traj
+    return WF, en_traj, rdm1_traj, rdm2_traj
