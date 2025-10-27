@@ -35,7 +35,6 @@ from slowquant.qiskit_interface.interface import QuantumInterface
 
 # Functions for rotoadapt
 import adapt_utils
-import copy
 
 ## INPUT VARIABLES
 
@@ -166,38 +165,19 @@ def do_adapt(WF, maxiter, epoch=1e-6, orbital_opt: bool = False):
     for j in range(maxiter):
         Hamiltonian = hamiltonian_0i_0a(WF.h_mo, WF.g_mo, WF.num_inactive_orbs, WF.num_active_orbs)
         grad = []
-        rounds = 0
-        active_arms = [i for i in range(len(pool_data['excitation operator']))]
-        x = 0.005
-        target_accuracy = 0.001
-        total_candidates = len(pool_data['excitation operator'])
-        temp_grad = np.zeros(total_candidates)
+        
         print(f"\nADAPT Step {j}: Calculating gradients for {len(pool_data['excitation operator'])} operators...")
-        while len(active_arms) > 1 and rounds < 10:
-            rounds += 1
-            for idx in active_arms:
-                T = pool_data["excitation operator"][idx] 
-                commutator = Hamiltonian * T - T * Hamiltonian
-                commutator_folded = commutator.get_folded_operator(
-                    WF.num_inactive_orbs, WF.num_active_orbs, WF.num_virtual_orbs
-                )
-                gr = WF.QI.quantum_expectation_value(commutator_folded, overwrite_shots=512)
-                temp_grad[idx] = (temp_grad[idx] * rounds + gr) / (rounds + 1)
-
-            temp_max_grad = np.max(np.abs(temp_grad))
-            accuracy = x - (x - target_accuracy) * rounds / 10
-            R = accuracy * 8
-            temp_active_arms = []
-            for idx in active_arms:
-                if np.abs(temp_grad[idx]) + R >= temp_max_grad - R:
-                    temp_active_arms.append(idx)
-            
-            active_arms = temp_active_arms
-            print(f"  Round {rounds}: {len(active_arms)} active operators remain.")
-
-            max_arg = np.argmax(np.abs(temp_grad))
-            max_grad = np.max(np.abs(temp_grad))
-
+        for idx, T in enumerate(pool_data["excitation operator"]):
+            commutator = Hamiltonian * T - T * Hamiltonian
+            commutator_folded = commutator.get_folded_operator(
+                WF.num_inactive_orbs, WF.num_active_orbs, WF.num_virtual_orbs
+            )
+            gr = WF.QI.quantum_expectation_value(commutator_folded)
+            grad.append(gr)
+        
+        max_arg = np.argmax(np.abs(grad))
+        max_grad = np.max(np.abs(grad))
+        
         print(f"  Maximum gradient: {max_grad:.6e} (operator {max_arg})")
         print(f"  Type: {pool_data['excitation type'][max_arg]}, Indices: {pool_data['excitation indeces'][max_arg]}")
         
@@ -216,7 +196,7 @@ def do_adapt(WF, maxiter, epoch=1e-6, orbital_opt: bool = False):
         WF.thetas = current_thetas + [0.0]
         
         print(f"  Running VQE optimization...")
-        WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, maxiter=20)
+        WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt)
         
         deltaE_adapt = np.abs(cas_en - WF.energy_elec)
         en_traj.append(WF.energy_elec)
