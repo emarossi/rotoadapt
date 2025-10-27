@@ -42,12 +42,12 @@ full_opt = args.full_opt
 # Getting path to current and parent folder
 parent_folder = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
 results_folder = os.path.join(parent_folder, "rotoadapt_analysis")
- 
+
 ## DEFINE MOLECULE IN PYSCF
 
 if molecule == 'H2O':
     # geometry = 'O 0.000000 0.000000 0.000000; H 0.960000 0.000000 0.000000; H -0.240365 0.929422 0.000000' #H2O equilibrium
-    geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA) 
+    geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA)
 
 if molecule == 'LiH':
     # geometry = 'H 0.000000 0.000000 0.000000; Li 1.595000 0.00000 0.000000' #LiH equilibrium
@@ -96,9 +96,12 @@ WF = WaveFunctionUPS(
         hf_obj.mo_coeff,
         h_ao,
         g_ao,
-        "adapt",
+        "fuccsd",
         include_active_kappa=True,
     )
+
+# Add energy evaluation counter attribute
+WF.num_energy_evals = 0
 
 en_traj = [hf_obj.energy_tot()-mol_obj.enuc]
 rdm1_traj = [WF.rdm1]
@@ -107,7 +110,7 @@ pool_data = adapt_utils.pool(WF, so_ir, gen)
 
 def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
     '''Run Adapt VQE algorithm
-    
+
     args:
         maxiter: max number of VQE iteration
         epoch: gradient variation threshold
@@ -131,7 +134,7 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
         H_ket = propagate_state([Hamiltonian], WF.ci_coeffs, WF.ci_info, WF.thetas, WF.ups_layout)
 
         grad = []
-        
+
         #GRADIENTS
         # grad = adapt_utils.gradient_parallel(WF, H_ket, pool_data)
         for T in pool_data["excitation operator"]:
@@ -155,7 +158,7 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
                 f"------GP{str("Grad").center(27)} | {str("Excitation Pool indices").center(18)} | {str("Excitation Pool type").center(27)}"
             )
         for i in range(len(grad)):
-            
+
             print(
                 f"------GP{str(grad[i]).center(27)} | {str(pool_data["excitation indeces"][i]).center(18)} | {pool_data["excitation type"][i].center(27)}"
             )
@@ -214,12 +217,12 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
             print()
             print("------TP Printing the Optimised Theta")
             print("------TP ############################")
-            
+
             print(
                     f"------TP {str("Thetas").center(27)} | {str("UPS Layout indices").center(18)} | {str("Excitation indices").center(18)} | {str("UPS Layout type").center(27)}"
             )
         # for i in range(len(self._thetas)):
-            
+
             # print(
                 # f"------TP {str(self._thetas[i]).center(27)} | {str(self.ups_layout.excitation_indices[i]).center(18)} |{str(self.ups_layout.excitation_indices[i] + self.num_inactive_spin_orbs ).center(18)} | {self.ups_layout.excitation_operator_type[i].center(27)}"
             # )

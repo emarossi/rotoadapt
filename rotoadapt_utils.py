@@ -1,6 +1,5 @@
 import numpy as np
 import copy
-import multiprocessing as mp
 import os
 import itertools
 
@@ -216,6 +215,7 @@ def pool_evaluator(WF, pool_index, pool_data, E_prev):
     '''
     Extends ansatz with candidate unitary from pool
     Finds global minimum using companion matrix method
+    Uses temporary modification to avoid deep copy issues
     
     Arguments
         WF: WF object from SlowQuant from previous iteration
@@ -258,7 +258,7 @@ def pool_evaluator(WF, pool_index, pool_data, E_prev):
 
 def pool_parallel(WF, H, pool_data, E_prev):
     '''
-    Parallelizes energy estimations over the pool
+    Evaluates energy estimates over the pool (sequential version to avoid pickle issues)
 
     Arguments
         WF: WF object from SlowQuant from previous iteration
@@ -297,7 +297,7 @@ def measure_energy_theta(WF, H, thetas_list):
 
 def measurement_parallel_opt(WF, H, d):
     '''
-    Parallelizes energy measurements for global minimum search
+    Performs energy measurements for global minimum search (sequential version to avoid pickle issues)
 
     Arguments
         WF: WF object from SlowQuant from previous iteration
@@ -312,8 +312,11 @@ def measurement_parallel_opt(WF, H, d):
     thetas_scan = [current_thetas[:d] + [current_thetas[d] + (2*np.pi*l)/5.5] + current_thetas[d+1:] for l in range(1,5)]
     thetas = [current_thetas[d] + (2*np.pi*l)/5.5 for l in range(1,5)]
 
-    with mp.Pool(processes=os.cpu_count()) as pool:
-            energies = pool.starmap(measure_energy_theta, [(WF, H, thetas_scan[i]) for i in range(0, len(thetas_scan))])
+    # Sequential evaluation to avoid multiprocessing pickle issues
+    energies = []
+    for i in range(len(thetas_scan)):
+        energy = measure_energy_theta(WF, H, thetas_scan[i])
+        energies.append(energy)
     
     return thetas, energies
 
@@ -460,6 +463,14 @@ def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_thresh
     converged = False
 
     while converged == False and WF.ups_layout.n_params <= 50:
+
+        # Load new operator in the ansatz and initialize
+        WF.ups_layout.excitation_indices.append((0,0))
+        WF.ups_layout.excitation_operator_type.append(" ")
+        WF.ups_layout.n_params += 1
+        WF._thetas.append(0.0)
+
+        results = []
 
         # Load new operator in the ansatz and initialize
         WF.ups_layout.excitation_indices.append((0,0))
