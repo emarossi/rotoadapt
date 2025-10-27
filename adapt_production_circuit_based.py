@@ -161,6 +161,7 @@ def rebuild_adapt_circuit(WF, selected_indices, selected_types):
 def do_adapt(WF, maxiter, epoch=1e-6, orbital_opt: bool = False):
     global adapt_selected_indices, adapt_selected_types
     nloop = 0
+    shots_per_selection = []
     
     for j in range(maxiter):
         Hamiltonian = hamiltonian_0i_0a(WF.h_mo, WF.g_mo, WF.num_inactive_orbs, WF.num_active_orbs)
@@ -177,6 +178,7 @@ def do_adapt(WF, maxiter, epoch=1e-6, orbital_opt: bool = False):
         
         max_arg = np.argmax(np.abs(grad))
         max_grad = np.max(np.abs(grad))
+        shots_per_selection.append(WF.QI.primitive.shots if WF.QI.primitive.shots is not None else 'statevector')
         
         print(f"  Maximum gradient: {max_grad:.6e} (operator {max_arg})")
         print(f"  Type: {pool_data['excitation type'][max_arg]}, Indices: {pool_data['excitation indeces'][max_arg]}")
@@ -212,14 +214,14 @@ def do_adapt(WF, maxiter, epoch=1e-6, orbital_opt: bool = False):
     print(f"Final energy: {WF.energy_elec:.8f} Ha")
     print(f"{'='*60}\n")
     
-    return WF, en_traj
+    return WF, en_traj, shots_per_selection
 
 epoch_ca = 1.6e-3
 
 print("\n" + "="*60)
 print("Starting Circuit-Based ADAPT-VQE")
 print("="*60)
-WF, en_traj = do_adapt(WF, epoch=epoch_ca, maxiter=30)
+WF, en_traj, shots_per_selection = do_adapt(WF, epoch=epoch_ca, maxiter=30)
 
 print("\n" + "="*60)
 print("FINAL RESULTS")
