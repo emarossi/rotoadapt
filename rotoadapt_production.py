@@ -18,6 +18,10 @@ from slowquant.unitary_coupled_cluster.operator_state_algebra import propagate_s
 # Wave function ansatz - unitary product state
 from slowquant.unitary_coupled_cluster.ups_wavefunction import WaveFunctionUPS
 
+# Qiskit utils to get number of measurements
+from qiskit_nature.second_q.operators import FermionicOp
+from qiskit_nature.second_q.mappers import JordanWignerMapper
+
 # Functions for rotoadapt
 import rotoadapt_utils
 
@@ -55,8 +59,8 @@ if molecule == 'LiH':
     geometry = 'H 0.000000 0.000000 0.000000; Li 3.0000 0.00000 0.000000' #LiH stretched
 
 if molecule == 'N2':
-    geometry = 'N 0.000000 0.000000 0.000000; N 1.0980 0.00000 0.000000' #N2 equilibrium
-    # geometry = 'N 0.000000 0.000000 0.000000; N 2.0980 0.00000 0.000000' #N2 stretched
+    # geometry = 'N 0.000000 0.000000 0.000000; N 1.0980 0.00000 0.000000' #N2 equilibrium
+    geometry = 'N 0.000000 0.000000 0.000000; N 2.0980 0.00000 0.000000' #N2 stretched
 
 if molecule == 'BeH2':
     # geometry = 'Be 0.000000 0.000000 0.000000; H 1.34000 0.00000 0.000000; H -1.34000 0.00000 0.000000' #BeH2 equilibrium
@@ -105,6 +109,20 @@ WF = WaveFunctionUPS(
         include_active_kappa=True,
     )
 
+#Energy Hamiltonian Fermionic operator
+Hamiltonian = hamiltonian_0i_0a(
+    WF.h_mo,
+    WF.g_mo,
+    WF.num_inactive_orbs,
+    WF.num_active_orbs,
+)
+
+#define mapper
+mapper = JordanWignerMapper()
+
+# Number of Pauli strings for Hamiltonian -> cost Hamiltonian evaluation
+NHam_qubit = len(mapper.map(FermionicOp(Hamiltonian.get_qiskit_form(WF.num_orbs), WF.num_spin_orbs)).paulis)
+
 ## DEFINE EXCITATION POOL -> dictionary with data
 
 pool_data = rotoadapt_utils.pool(WF, so_ir, gen)
@@ -119,6 +137,11 @@ if full_opt == True:
 if full_opt == False:
     WF, en_traj, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect(WF, pool_data, cas_en)  # rotoselect - no optimization
 
+# Count number of measurements (#layers * 4 * #op_pool * #Pauli_strings_H) + VQE cost
+num_en_evals = int((WF.ups_layout.n_params)*4*len(pool_data['excitation indeces'])*NHam_qubit) + int(WF.num_energy_evals*NHam_qubit)
+
+print(f'COST POOL: {int((WF.ups_layout.n_params)*4*len(pool_data['excitation indeces'])*NHam_qubit)} - COST VQE: {int(WF.num_energy_evals*NHam_qubit)}')
+
 # SAVING RELEVANT OBJECTS
 
 output = {'molecule': molecule,
@@ -128,11 +151,11 @@ output = {'molecule': molecule,
           'en_traj': np.array(en_traj), # array of electronic energie shape=(#layers)
           'rdm1_traj': rdm1_traj, # rdm1 over the whole trajectory WF object
           'rdm2_traj': rdm2_traj, # rdm1 over the whole trajectory WF object
-          'num_en_evals': WF.num_energy_evals,  # optimization total cost
+          'num_en_evals': num_en_evals,  # optimization total cost
           'ansatz_data': {'num_layers': WF.ups_layout.n_params,
                           'excitation_idx': WF.ups_layout.excitation_indices,
                           'excitation_op_type': WF.ups_layout.excitation_operator_type,
-                          'thetas': WF.thetas
+                          'thetas': WF.thetas,
                           },
           }
 

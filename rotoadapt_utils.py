@@ -57,29 +57,29 @@ def pool(WF, so_ir, generalized):
 
     # Pruning away symmetry-forbidden excitations
 
-    for num, excitation in enumerate(pool_data["excitation indeces"]):
+    # for num, excitation in enumerate(pool_data["excitation indeces"]):
 
-        if len(excitation) == 2:
+    #     if len(excitation) == 2:
 
-            i, a = excitation
+    #         i, a = excitation
 
-            if so_ir[i] != so_ir[a]:
-                del pool_data["excitation indeces"][num]
-                del pool_data["excitation type"][num]
-                del pool_data["excitation operator"][num]
+    #         if so_ir[i] != so_ir[a]:
+    #             del pool_data["excitation indeces"][num]
+    #             del pool_data["excitation type"][num]
+    #             del pool_data["excitation operator"][num]
 
-        if len(excitation) == 4:
+    #     if len(excitation) == 4:
 
-            i, j, a, b = excitation
+    #         i, j, a, b = excitation
 
-            if (so_ir[i] != so_ir[a] != so_ir[j] != so_ir[b]
-                or so_ir[i] != so_ir[j] and so_ir[a] != so_ir[b]
-                or so_ir[i] != so_ir[a] and so_ir[j] != so_ir[b]
-                or so_ir[i] != so_ir[b] and so_ir[j] != so_ir[a]):
+    #         if (so_ir[i] != so_ir[a] != so_ir[j] != so_ir[b]
+    #             or so_ir[i] != so_ir[j] and so_ir[a] != so_ir[b]
+    #             or so_ir[i] != so_ir[a] and so_ir[j] != so_ir[b]
+    #             or so_ir[i] != so_ir[b] and so_ir[j] != so_ir[a]):
 
-                del pool_data["excitation indeces"][num]
-                del pool_data["excitation type"][num]
-                del pool_data["excitation operator"][num]
+    #             del pool_data["excitation indeces"][num]
+    #             del pool_data["excitation type"][num]
+    #             del pool_data["excitation operator"][num]
 
     return pool_data
 
@@ -240,10 +240,10 @@ def pool_evaluator(WF, pool_index, pool_data, E_prev):
 
     for l in range(1,5):
         current_thetas = WF.thetas
-        current_thetas[-1] = (2*np.pi*l)/5.5
+        current_thetas[-1] = (2*np.pi*l)/5
         WF.thetas = current_thetas
         energies.append(WF.energy_elec)
-        thetas.append((2*np.pi*l)/5.5)
+        thetas.append((2*np.pi*l)/5)
 
     # WF.num_energy_evals += 4  # adding rotoselect energy evaluations
 
@@ -316,120 +316,6 @@ def measurement_parallel_opt(WF, H, d):
             energies = pool.starmap(measure_energy_theta, [(WF, H, thetas_scan[i]) for i in range(0, len(thetas_scan))])
     
     return thetas, energies
-
-def rotoadapt(WF, H, pool_data, max_epochs = 20, adapt_threshold = 1e-5, opt_threshold = 1e-5):
-    '''
-    Implements ADAPT ExcitationSolve algorithm from arXiv:2409.05939 (D.1, D.2)
-
-    Arguments
-        WF: wave function object from SlowQuant
-        H: Hamiltonian operator from SlowQuant
-        pool_data: dictionary with the data about the operator pool
-        max_epochs: max number of theta optimization cycles
-        adapt_threshold: min energy reduction upon addition of new layer
-        opt_threshold: min energy reduction upon theta optimization
-
-    Returns
-        WF: final wave function object from SlowQuant
-        en_traj: energy optimization trajectory    
-    '''
-
-    # Defining the excitation pool
-    excitation_pool = pool_data["excitation indeces"]
-    excitation_pool_type = pool_data["excitation type"]
-
-    # Initialize previous energy and energy trajectory (here with HF energy)
-    E_prev_adapt = float(expectation_value(WF.ci_coeffs, [H], WF.ci_coeffs, WF.ci_info, WF.thetas, WF.ups_layout))
-    en_traj = [E_prev_adapt]
-
-    num_measures = 0
-
-    converged = False
-
-    while converged == False:
-
-        # Looping through pool operator -> get the best ansatz
-        results = pool_parallel(WF, H, pool_data)
-        theta_pool, energy_pool = zip(*results)
-        op_index = np.argmin(energy_pool)
-
-        # Update number of measurements
-        num_measures += 5*len(excitation_pool)
-
-        print('OPERATOR->', op_index)
-        print(f'Theta {theta_pool[op_index]} - Energy {energy_pool[op_index]} - previous {E_prev_adapt}')
-
-        deltaE_adapt = np.abs(energy_pool[op_index]-E_prev_adapt)
-
-        # Updating WF with new operator
-        WF.ups_layout.excitation_indices.append(np.array(excitation_pool[op_index])-WF.num_inactive_spin_orbs)
-        WF.ups_layout.excitation_operator_type.append(excitation_pool_type[op_index])
-        WF.ups_layout.n_params += 1
-        WF._thetas.append(theta_pool[op_index])
-        WF.ci_coeffs = construct_ups_state(WF.ci_coeffs, WF.ci_info, WF.thetas, WF.ups_layout)  
-
-        if deltaE_adapt <= adapt_threshold:
-            en_traj.append(float(energy_pool[op_index]))
-            break
-
-        # Optimization of all the thetas after adding new layer
-
-        if WF.ups_layout.n_params == 1:
-            E_min = energy_pool[op_index]
-            deltaE_adapt = np.abs(E_prev_adapt-E_min)
-
-        else:
-
-            for epochs in range(max_epochs):
-
-                for d in range(WF.ups_layout.n_params):
-
-                    current_thetas = WF.thetas
-
-                    if epochs == 0:
-                        energies = [energy_pool[op_index]]
-                        thetas = [theta_pool[op_index]]
-                        E_prev_opt = energy_pool[op_index]
-
-                    sample_thetas, sample_energies = measurement_parallel_opt(WF, H, d)
-
-                    num_measures += 4
-
-                    Thetas = np.array(thetas + sample_thetas)
-                    Energies = np.array(energies + sample_energies)
-
-                    theta_min, E_min = optimizer(Thetas, Energies)
-
-                    current_thetas[d] = theta_min
-                    WF.thetas = current_thetas
-                    energies = [E_min]
-                    thetas = [theta_min]
-
-                deltaE_opt = np.abs(E_prev_opt-E_min)
-
-                print(f'Layer {WF.ups_layout.n_params} - convergence at step {epochs}:', deltaE_opt)
-
-                if deltaE_opt <= opt_threshold:
-                    break
-                else:
-                    E_prev_opt = E_min
-
-
-        deltaE_adapt = np.abs(E_min-E_prev_adapt)
-
-        print(f'deltaE_adapt for layers {WF.ups_layout.n_params} parameters is: ', deltaE_adapt)
-
-        if deltaE_adapt <= adapt_threshold:
-            print(f'FINAL RESULT - Energy: {energy_pool[op_index]} - Previous: {E_prev_adapt} - Delta: {deltaE_adapt} - Theta: {theta_pool[op_index]}')
-            en_traj.append(float(E_min))
-            converged = True
-
-        else:
-            en_traj.append(float(E_min))
-            E_prev_adapt = E_min
-            print(f'energy trajectory at layer {WF.ups_layout.n_params} = {en_traj}')
-
-    return WF, en_traj, num_measures
 
 def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_threshold for chemical accuracy
     '''
@@ -627,3 +513,81 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
                 E_prev_adapt = en_traj[-1]
 
     return WF, en_traj, rdm1_traj, rdm2_traj
+
+def rotosolve(WF, max_epochs = 20, opt_threshold = 1e-5):
+    '''
+    Implements ADAPT ExcitationSolve algorithm from arXiv:2409.05939 (D.1, D.2)
+
+    Arguments
+        WF: wave function object from SlowQuant
+        H: Hamiltonian operator from SlowQuant
+        pool_data: dictionary with the data about the operator pool
+        max_epochs: max number of theta optimization cycles
+        adapt_threshold: min energy reduction upon addition of new layer
+        opt_threshold: min energy reduction upon theta optimization
+
+    Returns
+        WF: final wave function object from SlowQuant
+        en_traj: energy optimization trajectory    
+    '''
+
+    converged = False
+
+    while converged == False:
+
+        if WF.ups_layout.n_params == 1:
+            E_min = energy_pool[op_index]
+            deltaE_adapt = np.abs(E_prev_adapt-E_min)
+
+        else:
+
+            for epochs in range(max_epochs):
+
+                for d in range(WF.ups_layout.n_params):
+
+                    current_thetas = WF.thetas
+
+                    if epochs == 0:
+                        energies = [energy_pool[op_index]]
+                        thetas = [theta_pool[op_index]]
+                        E_prev_opt = energy_pool[op_index]
+
+                    sample_thetas, sample_energies = measurement_parallel_opt(WF, H, d)
+
+                    num_measures += 4
+
+                    Thetas = np.array(thetas + sample_thetas)
+                    Energies = np.array(energies + sample_energies)
+
+                    theta_min, E_min = optimizer(Thetas, Energies)
+
+                    current_thetas[d] = theta_min
+                    WF.thetas = current_thetas
+                    energies = [E_min]
+                    thetas = [theta_min]
+
+                deltaE_opt = np.abs(E_prev_opt-E_min)
+
+                print(f'Layer {WF.ups_layout.n_params} - convergence at step {epochs}:', deltaE_opt)
+
+                if deltaE_opt <= opt_threshold:
+                    break
+                else:
+                    E_prev_opt = E_min
+
+
+        deltaE_adapt = np.abs(E_min-E_prev_adapt)
+
+        print(f'deltaE_adapt for layers {WF.ups_layout.n_params} parameters is: ', deltaE_adapt)
+
+        if deltaE_adapt <= adapt_threshold:
+            print(f'FINAL RESULT - Energy: {energy_pool[op_index]} - Previous: {E_prev_adapt} - Delta: {deltaE_adapt} - Theta: {theta_pool[op_index]}')
+            en_traj.append(float(E_min))
+            converged = True
+
+        else:
+            en_traj.append(float(E_min))
+            E_prev_adapt = E_min
+            print(f'energy trajectory at layer {WF.ups_layout.n_params} = {en_traj}')
+
+    return WF

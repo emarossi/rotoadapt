@@ -10,12 +10,16 @@ from slowquant.molecularintegrals.integralfunctions import one_electron_integral
 from slowquant.unitary_coupled_cluster.util import iterate_t1, iterate_t2
 
 # Operators
-from slowquant.unitary_coupled_cluster.operators import G1, G2
+from slowquant.unitary_coupled_cluster.operators import G1, G2, commutator
 from slowquant.unitary_coupled_cluster.operators import hamiltonian_0i_0a
 from slowquant.unitary_coupled_cluster.operator_state_algebra import propagate_state, expectation_value, construct_ups_state
 
 # Wave function ansatz - unitary product state
 from slowquant.unitary_coupled_cluster.ups_wavefunction import WaveFunctionUPS
+
+# Qiskit utils to get number of measurements
+from qiskit_nature.second_q.operators import FermionicOp
+from qiskit_nature.second_q.mappers import JordanWignerMapper
 
 # Functions for rotoadapt
 import adapt_utils
@@ -78,6 +82,7 @@ cas_obj = hf_obj.CASCI(nMO, nEL)
 cas_obj.kernel()
 
 cas_en = cas_obj.e_tot-mol_obj.enuc
+cas_rdm1 = cas_obj.make_rdm1()
 
 print(f'Energy HF: {hf_obj.energy_tot()-mol_obj.enuc}, Energy CAS: {cas_en}')
 
@@ -100,10 +105,31 @@ WF = WaveFunctionUPS(
         include_active_kappa=True,
     )
 
+#Energy Hamiltonian Fermionic operator
+Hamiltonian = hamiltonian_0i_0a(
+    WF.h_mo,
+    WF.g_mo,
+    WF.num_inactive_orbs,
+    WF.num_active_orbs,
+)
+
 en_traj = [hf_obj.energy_tot()-mol_obj.enuc]
 rdm1_traj = [WF.rdm1]
 
 pool_data = adapt_utils.pool(WF, so_ir, gen)
+pool_Ncomm_qubit = 0
+
+#define mapper
+mapper = JordanWignerMapper()
+
+# Number of Pauli strings for Hamiltonian -> cost Hamiltonian evaluation
+NHam_qubit = len(mapper.map(FermionicOp(Hamiltonian.get_qiskit_form(WF.num_orbs), WF.num_spin_orbs)).paulis)
+
+# Sum pauli strings for each commutator in the pool -> cost gradient evaluation in the pool
+for T in pool_data["excitation operator"]:
+
+    comm = commutator(T, Hamiltonian)
+    pool_Ncomm_qubit += len(mapper.map(FermionicOp(comm.get_qiskit_form(WF.num_orbs), WF.num_spin_orbs)).paulis)
 
 def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
     '''Run Adapt VQE algorithm
@@ -118,14 +144,6 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
 
     # ADAPT ANSATZ + VQE
     for j in range(maxiter):
-
-        #Energy Hamiltonian Fermionic operator
-        Hamiltonian = hamiltonian_0i_0a(
-            WF.h_mo,
-            WF.g_mo,
-            WF.num_inactive_orbs,
-            WF.num_active_orbs,
-        )
 
         #Apply operator to state -> obtain new state (list of operators, state, info on CI space, active space params)
         H_ket = propagate_state([Hamiltonian], WF.ci_coeffs, WF.ci_info, WF.thetas, WF.ups_layout)
@@ -175,7 +193,7 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
             break
 
         #Update ansatz with new excitation operator (corresponding to max gradient)
-        WF.ups_layout.excitation_indices.append(np.array(pool_data["excitation indeces"][max_arg])-WF.num_inactive_spin_orbs) # rescale indeces to stay only in active space (?)
+        WF.ups_layout.excitation_indices.append(pool_data["excitation indeces"][max_arg]) # rescale indeces to stay only in active space (?)
         WF.ups_layout.excitation_operator_type.append(pool_data["excitation type"][max_arg])
         #del excitation_pool[max_arg]
         #del excitation_pool_type[max_arg]
@@ -234,15 +252,22 @@ epoch_ca = 1.6e-3
 
 WF, en_traj, rdm1_traj = do_adapt(WF, epoch=epoch_ca, maxiter=50)
 
+# Total cost: cost_pool_evaluation * num_layers + cost VQE
+num_en_evals = int(pool_Ncomm_qubit)*WF.ups_layout.n_params + int(WF.num_energy_evals*NHam_qubit)
+print(f'COST POOL: {int(pool_Ncomm_qubit)*WF.ups_layout.n_params} - COST VQE: {int(WF.num_energy_evals*NHam_qubit)}')
+
+
 output = {'molecule': molecule,
-          'ci_ref': cas_obj.e_tot-mol_obj.enuc, # CASCI reference energy
+          'ref_data': {'en_ref': cas_obj.e_tot-mol_obj.enuc,
+                       'rdm1_ref': cas_rdm1
+                       }, # CASCI reference data
           'en_traj': np.array(en_traj), # array of electronic energie shape=(#layers)
           'rdm1_traj': rdm1_traj, # rdm1 over the whole trajectory WF object
-          'num_en_evals': WF.num_energy_evals,
+          'num_en_evals': num_en_evals,
           'ansatz_data': {'num_layers': WF.ups_layout.n_params,
                           'excitation_idx': WF.ups_layout.excitation_indices,
                           'excitation_op_type': WF.ups_layout.excitation_operator_type,
-                          'thetas': WF.thetas
+                          'thetas': WF.thetas,
                           },
           }
 
