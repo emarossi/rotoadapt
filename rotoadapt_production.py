@@ -138,9 +138,12 @@ if full_opt == False:
     WF, en_traj, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect(WF, pool_data, cas_en)  # rotoselect - no optimization
 
 # Count number of measurements (#layers * 4 * #op_pool * #Pauli_strings_H) + VQE cost
-num_en_evals = int((WF.ups_layout.n_params)*4*len(pool_data['excitation indeces'])*NHam_qubit) + int(WF.num_energy_evals*NHam_qubit)
+cost_pool = int((WF.ups_layout.n_params)*4*len(pool_data['excitation indeces'])*NHam_qubit)
+cost_VQE = int(WF.num_energy_evals*NHam_qubit)
 
-print(f'COST POOL: {int((WF.ups_layout.n_params)*4*len(pool_data['excitation indeces'])*NHam_qubit)} - COST VQE: {int(WF.num_energy_evals*NHam_qubit)}')
+num_en_evals = cost_pool + cost_VQE
+
+print(f'COST POOL: {cost_pool} - COST VQE: {cost_VQE}')
 
 # SAVING RELEVANT OBJECTS
 

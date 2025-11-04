@@ -193,17 +193,21 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
             break
 
         #Update ansatz with new excitation operator (corresponding to max gradient)
+        WF.ups_layout.n_params += 1
         WF.ups_layout.excitation_indices.append(pool_data["excitation indeces"][max_arg]) # rescale indeces to stay only in active space (?)
         WF.ups_layout.excitation_operator_type.append(pool_data["excitation type"][max_arg])
+        WF.ups_layout.grad_param_R[f"p{WF.ups_layout.n_params:09d}"] = 2
+        WF.ups_layout.param_names.append(f"p{WF.ups_layout.n_params:09d}")
         #del excitation_pool[max_arg]
         #del excitation_pool_type[max_arg]
-        WF.ups_layout.n_params += 1
         
         # add theta parameter for new operator
         WF._thetas.append(0.0)
         # np.append(WF._thetas, 0.0)
 
         # VQE optimization
+        # from rotoadapt_utils import rotosolve
+
         if full_opt == True:
             WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=False) # full VQE optimization
 
@@ -253,8 +257,12 @@ epoch_ca = 1.6e-3
 WF, en_traj, rdm1_traj = do_adapt(WF, epoch=epoch_ca, maxiter=50)
 
 # Total cost: cost_pool_evaluation * num_layers + cost VQE
-num_en_evals = int(pool_Ncomm_qubit)*WF.ups_layout.n_params + int(WF.num_energy_evals*NHam_qubit)
-print(f'COST POOL: {int(pool_Ncomm_qubit)*WF.ups_layout.n_params} - COST VQE: {int(WF.num_energy_evals*NHam_qubit)}')
+cost_pool = int(pool_Ncomm_qubit)*WF.ups_layout.n_params
+# cost_pool = int((WF.ups_layout.n_params)*4*len(pool_data['excitation indeces'])*NHam_qubit)
+cost_VQE = int(WF.num_energy_evals*NHam_qubit)
+
+num_en_evals = cost_pool + cost_VQE
+print(f'COST POOL: {cost_pool} - COST VQE: {int(WF.num_energy_evals*NHam_qubit)}')
 
 
 output = {'molecule': molecule,
