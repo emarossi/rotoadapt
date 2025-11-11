@@ -51,8 +51,8 @@ results_folder = os.path.join(parent_folder, "rotoadapt_analysis")
 ## DEFINE MOLECULE IN PYSCF
 
 if molecule == 'H2O':
-    # geometry = 'O 0.000000 0.000000 0.000000; H 0.960000 0.000000 0.000000; H -0.240365 0.929422 0.000000' #H2O equilibrium
-    geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA) 
+    geometry = 'O 0.000000 0.000000 0.000000; H 0.960000 0.000000 0.000000; H -0.240365 0.929422 0.000000' #H2O equilibrium
+    # geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA) 
 
 if molecule == 'LiH':
     # geometry = 'H 0.000000 0.000000 0.000000; Li 1.595000 0.00000 0.000000' #LiH equilibrium
@@ -63,8 +63,24 @@ if molecule == 'N2':
     geometry = 'N 0.000000 0.000000 0.000000; N 2.0980 0.00000 0.000000' #N2 stretched
 
 if molecule == 'BeH2':
-    # geometry = 'Be 0.000000 0.000000 0.000000; H 1.34000 0.00000 0.000000; H -1.34000 0.00000 0.000000' #BeH2 equilibrium
-    geometry = 'Be 0.000000 0.000000 0.000000; H 2.34000 0.00000 0.000000; H -2.34000 0.00000 0.000000' #BeH2 stretched
+    geometry = 'Be 0.000000 0.000000 0.000000; H 1.34000 0.00000 0.000000; H -1.34000 0.00000 0.000000' #BeH2 equilibrium
+
+## INSERTION PROBLEM
+if 'BeH2' in molecule and 'A' in molecule:
+    geometry = 'Be 0.000000 0.000000 0.000000; H 2.54000 0.00000 0.000000; H -2.54000 0.00000 0.000000' #BeH2 A
+
+if 'BeH2' in molecule and 'B' in molecule:
+    geometry = 'Be 0.000000 0.000000 0.000000; H 2.08000 0.00000 1.000000; H -2.08000 0.00000 1.000000' #BeH2 B
+
+if 'BeH2' in molecule and 'C' in molecule:
+    geometry = 'Be 0.000000 0.000000 0.000000; H 1.62000 0.00000 1.000000; H -1.62000 0.00000 2.000000' #BeH2 C
+
+if 'BeH2' in molecule and 'D' in molecule:
+    geometry = 'Be 0.000000 0.000000 0.000000; H 1.39000 0.00000 1.000000; H -1.39000 0.00000 2.500000' #BeH2 D
+
+if 'BeH2' in molecule and 'E' in molecule:
+    geometry = 'Be 0.000000 0.000000 0.000000; H 1.27500 0.00000 1.000000; H -1.27500 0.00000 2.750000' #BeH2 E
+
 
 mol_obj = gto.Mole()
 mol_obj.build(atom = geometry, basis = 'sto-3g', symmetry='c2v')
@@ -154,7 +170,10 @@ output = {'molecule': molecule,
           'en_traj': np.array(en_traj), # array of electronic energie shape=(#layers)
           'rdm1_traj': rdm1_traj, # rdm1 over the whole trajectory WF object
           'rdm2_traj': rdm2_traj, # rdm1 over the whole trajectory WF object
-          'num_en_evals': num_en_evals,  # optimization total cost
+          'num_en_evals': {'num_en_evals': num_en_evals,
+                           'cost_pool': cost_pool,
+                            'cost_VQE': cost_VQE
+                            },  # optimization total cost
           'ansatz_data': {'num_layers': WF.ups_layout.n_params,
                           'excitation_idx': WF.ups_layout.excitation_indices,
                           'excitation_op_type': WF.ups_layout.excitation_operator_type,

@@ -436,7 +436,7 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
 
     converged = False
 
-    while converged == False and WF.ups_layout.n_params <= 50:
+    while converged == False and WF.ups_layout.n_params <= 200:
 
         # Load new operator slot in the ansatz
         WF.ups_layout.n_params += 1
@@ -490,6 +490,7 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
 
             # Running an optimization
             WF.run_wf_optimization_1step("slsqp", orbital_optimization=False)
+            # WF = rotosolve(WF)
             
             # Appending energy to trajectory and updating 'previous' energy for next iteration
             en_traj.append(WF.energy_elec)
@@ -516,7 +517,7 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
 
     return WF, en_traj, rdm1_traj, rdm2_traj
 
-def rotosolve(WF, max_epochs = 1000, opt_threshold = 1e-10):
+def rotosolve(WF, max_epochs = 1000, opt_threshold = 1e-6):
     '''
     Implements RotoSolve algorithm from arXiv:2409.05939
 
@@ -533,49 +534,47 @@ def rotosolve(WF, max_epochs = 1000, opt_threshold = 1e-10):
     current_thetas = WF.thetas
     E_prev = WF.energy_elec
 
-    if WF.ups_layout.n_params > 1:
+    while converged == False:
 
-        while converged == False:
+        for epochs in range(max_epochs):
 
-            for epochs in range(max_epochs):
+            E_prev_ep = E_prev
 
-                E_prev_ep = E_prev
+            # Looping over all thetas parameters
+            for d in range(WF.ups_layout.n_params):
 
-                # Looping over all thetas parameters
-                for d in range(WF.ups_layout.n_params):
+                # Energy measurements to build system of equations
+                energies = [E_prev]
+                thetas = [current_thetas[d]]
 
-                    # Energy measurements to build system of equations
-                    energies = [E_prev]
-                    thetas = [current_thetas[d]]
-
-                    for l in range(1,5):
-                        current_thetas[d] = thetas[0] + (2*np.pi*l)/5
-                        WF.thetas = current_thetas
-                        energies.append(WF.energy_elec)
-                        thetas.append(current_thetas[d])
-
-                    Thetas = np.array(thetas)
-                    Energies = np.array(energies)
-
-                    # Find energy landscape and its global minimum
-                    theta_min, E_min = optimizer(Thetas, Energies)
-
-                    # Assign minimum theta to current_thetas
-                    current_thetas[d] = theta_min
-                    E_prev = E_min
-
-                    # Updating thetas and adding OPT energy evaluations
+                for l in range(1,5):
+                    current_thetas[d] = thetas[0] + (2*np.pi*l)/5
                     WF.thetas = current_thetas
-                    WF.num_energy_evals += 4
+                    energies.append(WF.energy_elec)
+                    thetas.append(current_thetas[d])
 
-                deltaE = np.abs(E_prev_ep-E_prev)
+                Thetas = np.array(thetas)
+                Energies = np.array(energies)
 
-                if deltaE <= opt_threshold:
-                    print(f'Layer: {WF.ups_layout.n_params} - CONVERGED at step: {epochs} - \u0394E: {deltaE}')
-                    converged = True
-                    break
+                # Find energy landscape and its global minimum
+                theta_min, E_min = optimizer(Thetas, Energies)
 
-                else:
-                    print(f'Layer: {WF.ups_layout.n_params} - convergence at step: {epochs} - \u0394E: {deltaE}')
+                # Assign minimum theta to current_thetas
+                current_thetas[d] = theta_min
+                E_prev = E_min
+
+                # Updating thetas and adding OPT energy evaluations
+                WF.thetas = current_thetas
+                WF.num_energy_evals += 4
+
+            deltaE = np.abs(E_prev_ep-E_prev)
+
+            if deltaE <= opt_threshold:
+                print(f'Layer: {WF.ups_layout.n_params} - CONVERGED at step: {epochs} - \u0394E: {deltaE}')
+                converged = True
+                break
+
+            else:
+                print(f'Layer: {WF.ups_layout.n_params} - convergence at step: {epochs} - \u0394E: {deltaE}')
 
     return WF
