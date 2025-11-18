@@ -66,20 +66,32 @@ if molecule == 'BeH2':
     geometry = 'Be 0.000000 0.000000 0.000000; H 1.34000 0.00000 0.000000; H -1.34000 0.00000 0.000000' #BeH2 equilibrium
 
 ## INSERTION PROBLEM
-if 'BeH2' in molecule and 'A' in molecule:
+if molecule == 'BeH2-A':
     geometry = 'Be 0.000000 0.000000 0.000000; H 2.54000 0.00000 0.000000; H -2.54000 0.00000 0.000000' #BeH2 A
 
-if 'BeH2' in molecule and 'B' in molecule:
+if molecule == 'BeH2-B':
     geometry = 'Be 0.000000 0.000000 0.000000; H 2.08000 0.00000 1.000000; H -2.08000 0.00000 1.000000' #BeH2 B
 
-if 'BeH2' in molecule and 'C' in molecule:
-    geometry = 'Be 0.000000 0.000000 0.000000; H 1.62000 0.00000 1.000000; H -1.62000 0.00000 2.000000' #BeH2 C
+if molecule == 'BeH2-C':
+    geometry = 'Be 0.000000 0.000000 0.000000; H 1.62000 0.00000 2.000000; H -1.62000 0.00000 2.000000' #BeH2 C
 
-if 'BeH2' in molecule and 'D' in molecule:
-    geometry = 'Be 0.000000 0.000000 0.000000; H 1.39000 0.00000 1.000000; H -1.39000 0.00000 2.500000' #BeH2 D
+if molecule == 'BeH2-D':
+    geometry = 'Be 0.000000 0.000000 0.000000; H 1.39000 0.00000 2.500000; H -1.39000 0.00000 2.500000' #BeH2 D
 
-if 'BeH2' in molecule and 'E' in molecule:
-    geometry = 'Be 0.000000 0.000000 0.000000; H 1.27500 0.00000 1.000000; H -1.27500 0.00000 2.750000' #BeH2 E
+if molecule == 'BeH2-E':
+    geometry = 'Be 0.000000 0.000000 0.000000; H 1.27500 0.00000 2.750000; H -1.27500 0.00000 2.750000' #BeH2 E
+
+if molecule == 'BeH2-F':
+    geometry = 'Be 0.000000 0.000000 0.000000; H 1.16000 0.00000 3.000000; H -1.16000 0.00000 3.000000' #BeH2 F
+
+if molecule == 'BeH2-G':
+    geometry = 'Be 0.000000 0.000000 0.000000; H 0.93000 0.00000 3.500000; H -0.93000 0.00000 3.500000' #BeH2 G
+
+if molecule == 'BeH2-H':
+    geometry = 'Be 0.000000 0.000000 0.000000; H 0.70000 0.00000 4.000000; H -0.70000 0.00000 4.000000' #BeH2 H
+
+if molecule == 'BeH2-I':
+    geometry = 'Be 0.000000 0.000000 0.000000; H 0.70000 0.00000 6.000000; H -0.70000 0.00000 6.000000' #BeH2 I
 
 
 mol_obj = gto.Mole()
@@ -164,8 +176,9 @@ print(f'COST POOL: {cost_pool} - COST VQE: {cost_VQE}')
 # SAVING RELEVANT OBJECTS
 
 output = {'molecule': molecule,
-          'ref_data': {'en_ref': cas_obj.e_tot-mol_obj.enuc,
-                       'rdm1_ref': cas_rdm1
+          'ref_data': {'elec_en_ref': cas_obj.e_tot-mol_obj.enuc,
+                       'nuc_en_ref': mol_obj.enuc,
+                       'rdm1_ref': cas_rdm1,
                        }, # CASCI reference data
           'en_traj': np.array(en_traj), # array of electronic energie shape=(#layers)
           'rdm1_traj': rdm1_traj, # rdm1 over the whole trajectory WF object

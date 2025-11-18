@@ -55,32 +55,6 @@ def pool(WF, so_ir, generalized):
             pool_data["excitation type"].append("double")
             pool_data["excitation operator"].append(G2(i, j, a, b, True))
 
-    # Pruning away symmetry-forbidden excitations
-
-    # for num, excitation in enumerate(pool_data["excitation indeces"]):
-
-    #     if len(excitation) == 2:
-
-    #         i, a = excitation
-
-    #         if so_ir[i] != so_ir[a]:
-    #             del pool_data["excitation indeces"][num]
-    #             del pool_data["excitation type"][num]
-    #             del pool_data["excitation operator"][num]
-
-    #     if len(excitation) == 4:
-
-    #         i, j, a, b = excitation
-
-    #         if (so_ir[i] != so_ir[a] != so_ir[j] != so_ir[b]
-    #             or so_ir[i] != so_ir[j] and so_ir[a] != so_ir[b]
-    #             or so_ir[i] != so_ir[a] and so_ir[j] != so_ir[b]
-    #             or so_ir[i] != so_ir[b] and so_ir[j] != so_ir[a]):
-
-    #             del pool_data["excitation indeces"][num]
-    #             del pool_data["excitation type"][num]
-    #             del pool_data["excitation operator"][num]
-
     return pool_data
 
 def energy_landscape(A, B, C, D, E, theta):
