@@ -61,36 +61,36 @@ if molecule == 'LiH':
 if molecule == 'N2':
     geometry = 'N 0.000000 0.000000 0.000000; N 2.0980 0.00000 0.000000' #N2 stretched
 
-if molecule == 'BeH2':
-    geometry = 'Be 0.000000 0.000000 0.000000; H 1.34000 0.00000 0.000000; H -1.34000 0.00000 0.000000' #BeH2 equilibrium
+## BeH2 INSERTION PROBLEM
+if 'BeH2' in molecule:
 
-## INSERTION PROBLEM
-if molecule == 'BeH2-A':
-    geometry = 'Be 0.000000 0.000000 0.000000; H 2.54000 0.00000 0.000000; H -2.54000 0.00000 0.000000' #BeH2 A
+    def Be_ins_coords(x_Be):
+        '''
+        Generates coordinates for BeH2 insertion
+        Be moving along x, H2 moving along z according to:
+        z_H = -0.46*x_Be+2.54
+        
+        Arguments
+            x_Be: x coordinate of the Be atom
+        
+        Returns
+            Be_xyz+H2_xyz: string with xyz coordinates of BeH2
+        '''
+        if x_Be <= 4:
+            z_H = -0.46*x_Be+2.54
+        else:
+            z_H = 0.7
+        
+        # Converting into Angstroms
+        x_Be *= 0.529177
+        z_H *= 0.529177
 
-if molecule == 'BeH2-B':
-    geometry = 'Be 0.000000 0.000000 0.000000; H 2.08000 0.00000 1.000000; H -2.08000 0.00000 1.000000' #BeH2 B
+        Be_xyz = f'Be {x_Be:.6f} 0.000000 0.000000; '
+        H2_xyz = f'H 0.000000 0.000000 {np.abs(z_H):.6f}; H 0.000000 0.000000 -{np.abs(z_H):.6f}'
 
-if molecule == 'BeH2-C':
-    geometry = 'Be 0.000000 0.000000 0.000000; H 1.62000 0.00000 2.000000; H -1.62000 0.00000 2.000000' #BeH2 C
+        return Be_xyz+H2_xyz
 
-if molecule == 'BeH2-D':
-    geometry = 'Be 0.000000 0.000000 0.000000; H 1.39000 0.00000 2.500000; H -1.39000 0.00000 2.500000' #BeH2 D
-
-if molecule == 'BeH2-E':
-    geometry = 'Be 0.000000 0.000000 0.000000; H 1.27500 0.00000 2.750000; H -1.27500 0.00000 2.750000' #BeH2 E
-
-if molecule == 'BeH2-F':
-    geometry = 'Be 0.000000 0.000000 0.000000; H 1.16000 0.00000 3.000000; H -1.16000 0.00000 3.000000' #BeH2 F
-
-if molecule == 'BeH2-G':
-    geometry = 'Be 0.000000 0.000000 0.000000; H 0.93000 0.00000 3.500000; H -0.93000 0.00000 3.500000' #BeH2 G
-
-if molecule == 'BeH2-H':
-    geometry = 'Be 0.000000 0.000000 0.000000; H 0.70000 0.00000 4.000000; H -0.70000 0.00000 4.000000' #BeH2 H
-
-if molecule == 'BeH2-I':
-    geometry = 'Be 0.000000 0.000000 0.000000; H 0.70000 0.00000 6.000000; H -0.70000 0.00000 6.000000' #BeH2 I
+    geometry = Be_ins_coords(float(molecule.split('-')[1].strip()))
 
 
 
