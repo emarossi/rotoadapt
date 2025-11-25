@@ -1,3 +1,13 @@
+import sys
+import importlib
+# Clear any system-installed slowquant modules
+for module in list(sys.modules.keys()):
+    if module.startswith('slowquant'):
+        del sys.modules[module]
+# Add SlowQuant_copy to path FIRST
+sys.path.insert(0, '/Users/rick/rotoadapt/SlowQuant_copy')
+
+
 import numpy as np
 from pyscf import gto, scf
 import matplotlib.pyplot as plt
@@ -18,6 +28,7 @@ from slowquant.unitary_coupled_cluster.operator_state_algebra import propagate_s
 from slowquant.unitary_coupled_cluster.ups_wavefunction import WaveFunctionUPS
 
 # Functions for rotoadapt
+import rotoadapt_utils
 import adapt_utils
 
 ## INPUT VARIABLES
@@ -41,7 +52,7 @@ full_opt = args.full_opt
 
 # Getting path to current and parent folder
 parent_folder = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
-results_folder = os.path.join(parent_folder, "rotoadapt_analysis")
+results_folder = os.path.join(parent_folder, "rotoadapt")
 
 ## DEFINE MOLECULE IN PYSCF
 
@@ -55,6 +66,10 @@ if molecule == 'LiH':
 
 if molecule == 'N2':
     geometry = 'N 0.000000 0.000000 0.000000; N 2.0980 0.00000 0.000000' #N2 stretched
+
+if molecule == 'H4':
+    geometry = 'H 0.000000 0.000000 0.000000; H 1.000000 0.000000 0.000000; H 2.000000 0.000000 0.000000; H 3.000000 0.000000 0.000000'
+
 
 if molecule == 'BeH2':
     # geometry = 'Be 0.000000 0.000000 0.000000; H 1.34000 0.00000 0.000000; H -1.34000 0.00000 0.000000' #BeH2 equilibrium
@@ -105,6 +120,7 @@ WF.num_energy_evals = 0
 
 en_traj = [hf_obj.energy_tot()-mol_obj.enuc]
 rdm1_traj = [WF.rdm1]
+pool_data = adapt_utils.pool(WF, so_ir, gen)
 
 pool_data = adapt_utils.pool(WF, so_ir, gen)
 
@@ -148,20 +164,20 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
         print()
         print("------GP Printing Grad and Excitation Pool")
         print("------GP #################################")
-        print(
-                f"------GP{str("").center(72)}"
-            )
-        print(
-                f"------GP{str("-----------------------------------------------------------------------------------").center(72)}"
-            )
-        print(
-                f"------GP{str("Grad").center(27)} | {str("Excitation Pool indices").center(18)} | {str("Excitation Pool type").center(27)}"
-            )
-        for i in range(len(grad)):
+        # print(
+        #         f"------GP{str("").center(72)}"
+        #     )
+        # print(
+        #         f"------GP{str("-----------------------------------------------------------------------------------").center(72)}"
+        #     )
+        # print(
+        #         f"------GP{str("Grad").center(27)} | {str("Excitation Pool indices").center(18)} | {str("Excitation Pool type").center(27)}"
+        #     )
+        # for i in range(len(grad)):
 
-            print(
-                f"------GP{str(grad[i]).center(27)} | {str(pool_data["excitation indeces"][i]).center(18)} | {pool_data["excitation type"][i].center(27)}"
-            )
+        #     print(
+        #         f"------GP{str(grad[i]).center(27)} | {str(pool_data["excitation indeces"][i]).center(18)} | {pool_data["excitation type"][i].center(27)}"
+        #     )
 
         print()
         print("### Index of Max grad :: ", end=" ")
@@ -218,9 +234,7 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
             print("------TP Printing the Optimised Theta")
             print("------TP ############################")
 
-            print(
-                    f"------TP {str("Thetas").center(27)} | {str("UPS Layout indices").center(18)} | {str("Excitation indices").center(18)} | {str("UPS Layout type").center(27)}"
-            )
+            # print(f"------TP {str("Thetas").center(27)} | {str("UPS Layout indices").center(18)} | {str("Excitation indices").center(18)} | {str("UPS Layout type").center(27)}")
         # for i in range(len(self._thetas)):
 
             # print(
@@ -258,3 +272,26 @@ if full_opt == True:
 if full_opt == False:
     with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR_last_opt.pkl'), 'wb') as f:
         pickle.dump(output, f)    
+
+
+## PLOT ENERGY ERROR VS ITERATIONS
+plt.figure(figsize=(8, 6))
+
+# Calculate energy error (difference from CASCI reference)
+en_error = np.abs(np.array(en_traj) - cas_en)
+
+# Plot
+plt.plot(range(len(en_error)), en_error, 'o-', label='ADAPT-VQE')
+plt.axhline(y=epoch_ca, color='r', linestyle='--', label=f'Chemical accuracy ({epoch_ca})')
+
+plt.xlabel('Iteration')
+plt.ylabel('Energy Error (Hartree)')
+plt.yscale('log')  # Log scale to see convergence clearly
+plt.title(f'{molecule} ({nEL}e, {nMO}o) - ADAPT-VQE Convergence')
+plt.legend()
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+
+# Save figure
+plt.savefig(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-energy_error.png'), dpi=150)
+plt.show()
