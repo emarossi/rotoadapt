@@ -241,3 +241,29 @@ print(f"Energy Error:   {abs(WF.energy_elec - cas_en):.6e} Ha")
 print(f"Circuit Depth:  {len(adapt_selected_indices)} operators")
 print(f"Parameters:     {len(WF.thetas)}")
 print("="*60)
+
+## PLOT ENERGY ERROR VS TOTAL MEASUREMENTS
+plt.figure(figsize=(8, 6))
+
+# Calculate energy error (difference from CASCI reference)
+# en_traj[0] is HF, en_traj[1:] are ADAPT iterations
+en_error = np.abs(np.array(en_traj[1:]) - cas_en)
+
+# Plot energy error vs cumulative measurements
+plt.plot(cumulative_measurements[:len(en_error)], en_error, 'o-', label='ADAPT-VQE')
+plt.axhline(y=epoch_ca, color='r', linestyle='--', label=f'Chemical accuracy ({epoch_ca})')
+
+plt.xlabel('Total Measurements')
+plt.ylabel('Energy Error (Hartree)')
+plt.yscale('log')
+plt.title(f'{molecule} ({nEL}e, {nMO}o) - ADAPT-VQE Convergence')
+plt.legend()
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+
+# Save figure
+parent_folder = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
+results_folder = os.path.join(parent_folder, "rotoadapt")
+os.makedirs(results_folder, exist_ok=True)
+plt.savefig(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-circuit-energy_vs_measurements.png'), dpi=150)
+plt.show()

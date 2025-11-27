@@ -39,8 +39,8 @@ parser = argparse.ArgumentParser(description="rodoadapt script - returns energy 
 # Add arguments
 parser.add_argument("--mol", type=str, required = True, help="Molecule (H2O, LiH)")
 parser.add_argument("--AS", type=int, nargs=2, required = True, help="Active space nEL nMO")
-parser.add_argument("--gen", type=bool, default = False, help="Generalized excitation operators")
-parser.add_argument("--full_opt", type=bool, default = False, help="full VQE optimization")
+parser.add_argument("--gen", action="store_true", default=False, help="Generalized excitation operators")
+parser.add_argument("--full_opt", action="store_true", default=False, help="full VQE optimization")
 
 # Parse arguments
 args = parser.parse_args()
@@ -212,10 +212,11 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
             WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=True) # Optimize only last unitary
 
         deltaE_adapt = np.abs(cas_en-WF.energy_elec)
+        en_traj.append(WF.energy_elec)
         rdm1_traj.append(WF.rdm1)
+        print(f"Iteration {j}: deltaE_adapt = {deltaE_adapt}, epoch = {epoch}")
 
         if deltaE_adapt < epoch:
-            en_traj.append(WF.energy_elec)
             # Final printout
             print('----------------------')
             print(f'FINAL RESULT - Energy: {en_traj[-1]} - #Layers: {WF.ups_layout.n_params}')
@@ -225,9 +226,8 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
             break
 
         else:
-            en_traj.append(WF.energy_elec)
             print('#########CI COEFFS########')
-            print(WF.ci_coeffs)
+            # print(WF.ci_coeffs)
             print('#########################')
 
             print()
