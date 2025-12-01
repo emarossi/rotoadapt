@@ -6,8 +6,9 @@ import importlib
 for module in list(sys.modules.keys()):
     if module.startswith('slowquant'):
         del sys.modules[module]
-# Add SlowQuant_copy to path FIRST
-sys.path.insert(0, '/Users/rick/rotoadapt/SlowQuant_copy')
+# Add SlowQuant_copy to path FIRST (relative to this script's location)
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(_script_dir, 'SlowQuant_copy'))
 
 import numpy as np
 from pyscf import gto, scf
