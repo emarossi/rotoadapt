@@ -6,7 +6,7 @@ for module in list(sys.modules.keys()):
         del sys.modules[module]
 # Add SlowQuant_copy to path FIRST (relative to this script's location)
 _script_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(_script_dir, 'SlowQuant_copy'))
+sys.path.insert(0, os.path.join(_script_dir, 'SlowQuant'))
 
 
 import numpy as np
