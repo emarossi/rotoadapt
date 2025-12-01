@@ -197,12 +197,15 @@ def do_adapt(WF, maxiter, epoch=1e-6, orbital_opt: bool = False):
         
         adapt_selected_indices.append(pool_data['excitation indeces'][max_arg])
         adapt_selected_types.append(pool_data['excitation type'][max_arg])
-        
+
+        # Save current optimized thetas BEFORE rebuilding circuit
+        current_thetas = WF.thetas.copy() if WF.thetas else []
+
         print(f"  Adding operator to circuit...")
         rebuild_adapt_circuit(WF, adapt_selected_indices, adapt_selected_types)
-        
-        current_thetas = WF.thetas
-        WF.thetas = current_thetas + [0.0]
+
+        # Set thetas: previous optimized values + 0.0 for new operator
+        WF.QI._parameters = current_thetas + [0.0]
         
         print(f"  Running VQE optimization...")
         WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt)
@@ -265,5 +268,5 @@ plt.tight_layout()
 parent_folder = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
 results_folder = os.path.join(parent_folder, "rotoadapt")
 os.makedirs(results_folder, exist_ok=True)
-plt.savefig(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-circuit-energy_vs_measurements.png'), dpi=150)
+plt.savefig(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-circuit-energy_vs_measurements_exact.png'), dpi=150)
 plt.show()
