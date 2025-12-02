@@ -46,13 +46,15 @@ full_opt = args.full_opt
 
 # Getting path to current and parent folder
 parent_folder = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
-results_folder = os.path.join(parent_folder, "rotoadapt_analysis")
- 
+results_folder = os.path.join(parent_folder, "rotoadapt/rotoadapt_analysis")
+
+results_folder = os.path.join(parent_folder, "rotoadapt/rotoadapt_analysis")
+
 ## DEFINE MOLECULE IN PYSCF
 
 if molecule == 'H2O':
     # geometry = 'O 0.000000 0.000000 0.000000; H 0.960000 0.000000 0.000000; H -0.240365 0.929422 0.000000' #H2O equilibrium
-    geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA) 
+    geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA)
 
 if molecule == 'LiH':
     # geometry = 'H 0.000000 0.000000 0.000000; Li 1.595000 0.00000 0.000000' #LiH equilibrium
@@ -135,7 +137,7 @@ WF = WaveFunctionUPS(
         hf_obj.mo_coeff,
         h_ao,
         g_ao,
-        "adapt",
+        "fuccsd",
         include_active_kappa=True,
     )
 
@@ -156,6 +158,21 @@ NHam_qubit = len(mapper.map(FermionicOp(Hamiltonian.get_qiskit_form(WF.num_orbs)
 ## DEFINE EXCITATION POOL -> dictionary with data
 
 pool_data = rotoadapt_utils.pool(WF, so_ir, gen)
+
+
+## EXCITATION WITH RESPECT TO HF REFERENCE
+
+## Generate indeces for singly-excited operators
+# for a, i in iterate_t1(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
+#     pool_data["excitation indeces"].append((i, a))            
+#     pool_data["excitation type"].append("single")
+#     pool_data["excitation operator"].append(G1(i, a, True))
+
+## Generate indeces for doubly-excited operators
+# for a, i, b, j in iterate_t2(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
+#     pool_data["excitation indeces"].append((i, j, a, b))
+#     pool_data["excitation type"].append("double")
+#     pool_data["excitation operator"].append(G2(i, j, a, b, True))
 
 ## CALCULATE ROTOADAPT
 
