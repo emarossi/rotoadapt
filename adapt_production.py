@@ -51,8 +51,8 @@ results_folder = os.path.join(parent_folder, "rotoadapt_analysis")
 ## DEFINE MOLECULE IN PYSCF
 
 if molecule == 'H2O':
-    geometry = 'O 0.000000 0.000000 0.000000; H 0.960000 0.000000 0.000000; H -0.240365 0.929422 0.000000' #H2O equilibrium
-    # geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA) 
+    # geometry = 'O 0.000000 0.000000 0.000000; H 0.960000 0.000000 0.000000; H -0.240365 0.929422 0.000000' #H2O equilibrium
+    geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA) 
 
 if molecule == 'LiH':
     # geometry = 'H 0.000000 0.000000 0.000000; Li 1.595000 0.00000 0.000000' #LiH equilibrium
@@ -60,6 +60,9 @@ if molecule == 'LiH':
 
 if molecule == 'N2':
     geometry = 'N 0.000000 0.000000 0.000000; N 2.0980 0.00000 0.000000' #N2 stretched
+
+if molecule == 'H6': #stretched H6
+    geometry = "H -7.500000 0.000000 0.000000; H -4.500000 0.000000 0.000000; H -1.500000 0.000000 0.000000; H 1.500000 0.000000 0.000000; H 4.500000 0.000000 0.000000; H 7.500000 0.000000 0.000000"
 
 ## BeH2 INSERTION PROBLEM
 if 'BeH2' in molecule:
@@ -95,7 +98,7 @@ if 'BeH2' in molecule:
 
 
 mol_obj = gto.Mole()
-mol_obj.build(atom = geometry, basis = '321++g', symmetry='c2v')
+mol_obj.build(atom = geometry, basis = 'sto-3g', symmetry='c2v')
 hf_obj = scf.RHF(mol_obj)
 hf_obj.kernel()
 
@@ -284,7 +287,7 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
 
 epoch_ca = 1.6e-3
 
-WF, en_traj, rdm1_traj = do_adapt(WF, epoch=epoch_ca, maxiter=200)
+WF, en_traj, rdm1_traj = do_adapt(WF, epoch=epoch_ca, maxiter=1000)
 
 # Total cost: cost_pool_evaluation * num_layers + cost VQE
 cost_pool = int(pool_Ncomm_qubit)*WF.ups_layout.n_params
@@ -316,9 +319,9 @@ output = {'molecule': molecule,
 ## OUTPUT ONLY LAST OPTIMIZATION
 
 if full_opt == True:
-    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR.pkl'), 'wb') as f:
+    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-GR.pkl'), 'wb') as f:
         pickle.dump(output, f)
 
 if full_opt == False:
-    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR_last_opt.pkl'), 'wb') as f:
+    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-GR_last_opt.pkl'), 'wb') as f:
         pickle.dump(output, f)    

@@ -51,8 +51,8 @@ results_folder = os.path.join(parent_folder, "rotoadapt_analysis")
 ## DEFINE MOLECULE IN PYSCF
 
 if molecule == 'H2O':
-    geometry = 'O 0.000000 0.000000 0.000000; H 0.960000 0.000000 0.000000; H -0.240365 0.929422 0.000000' #H2O equilibrium
-    # geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA) 
+    # geometry = 'O 0.000000 0.000000 0.000000; H 0.960000 0.000000 0.000000; H -0.240365 0.929422 0.000000' #H2O equilibrium
+    geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA) 
 
 if molecule == 'LiH':
     # geometry = 'H 0.000000 0.000000 0.000000; Li 1.595000 0.00000 0.000000' #LiH equilibrium
@@ -61,6 +61,9 @@ if molecule == 'LiH':
 if molecule == 'N2':
     # geometry = 'N 0.000000 0.000000 0.000000; N 1.0980 0.00000 0.000000' #N2 equilibrium
     geometry = 'N 0.000000 0.000000 0.000000; N 2.0980 0.00000 0.000000' #N2 stretched
+
+if molecule == 'H6': # stretched H6
+    geometry = "H -7.500000 0.000000 0.000000; H -4.500000 0.000000 0.000000; H -1.500000 0.000000 0.000000; H 1.500000 0.000000 0.000000; H 4.500000 0.000000 0.000000; H 7.500000 0.000000 0.000000"
 
 ## BeH2 INSERTION PROBLEM
 if 'BeH2' in molecule:
@@ -196,7 +199,7 @@ output = {'molecule': molecule,
 if full_opt == True:
 
     if gen == False:
-        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT.pkl'), 'wb') as f:
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RS_OPT.pkl'), 'wb') as f:
             pickle.dump(output, f)
 
     if gen == True:
@@ -204,5 +207,5 @@ if full_opt == True:
             pickle.dump(output, f)
 
 if full_opt == False:
-    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS.pkl'), 'wb') as f:
+    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RS.pkl'), 'wb') as f:
         pickle.dump(output, f)
