@@ -21,16 +21,21 @@ from slowquant.molecularintegrals.integralfunctions import one_electron_integral
 from slowquant.unitary_coupled_cluster.util import iterate_t1, iterate_t2
 
 # Operators
-from slowquant.unitary_coupled_cluster.operators import G1, G2
+from slowquant.unitary_coupled_cluster.operators import G1, G2, commutator
 from slowquant.unitary_coupled_cluster.operators import hamiltonian_0i_0a
 from slowquant.unitary_coupled_cluster.operator_state_algebra import propagate_state, expectation_value, construct_ups_state
 
 # Wave function ansatz - unitary product state
 from slowquant.unitary_coupled_cluster.ups_wavefunction import WaveFunctionUPS
 
+# Qiskit utils to get number of measurements
+from qiskit_nature.second_q.operators import FermionicOp
+from qiskit_nature.second_q.mappers import JordanWignerMapper
+
 # Functions for rotoadapt
 import rotoadapt_utils
 import adapt_utils
+from rotoadapt_utils import rotosolve
 
 ## INPUT VARIABLES
 
@@ -68,13 +73,40 @@ if molecule == 'LiH':
 if molecule == 'N2':
     geometry = 'N 0.000000 0.000000 0.000000; N 2.0980 0.00000 0.000000' #N2 stretched
 
-if molecule == 'H4':
-    geometry = 'H 0.000000 0.000000 0.000000; H 1.000000 0.000000 0.000000; H 2.000000 0.000000 0.000000; H 3.000000 0.000000 0.000000'
+if molecule == 'H6': #stretched H6
+    geometry = "H -7.500000 0.000000 0.000000; H -4.500000 0.000000 0.000000; H -1.500000 0.000000 0.000000; H 1.500000 0.000000 0.000000; H 4.500000 0.000000 0.000000; H 7.500000 0.000000 0.000000"
 
+## BeH2 INSERTION PROBLEM
+if 'BeH2' in molecule:
 
-if molecule == 'BeH2':
-    # geometry = 'Be 0.000000 0.000000 0.000000; H 1.34000 0.00000 0.000000; H -1.34000 0.00000 0.000000' #BeH2 equilibrium
-    geometry = 'Be 0.000000 0.000000 0.000000; H 2.34000 0.00000 0.000000; H -2.34000 0.00000 0.000000' #BeH2 stretched
+    def Be_ins_coords(x_Be):
+        '''
+        Generates coordinates for BeH2 insertion
+        Be moving along x, H2 moving along z according to:
+        z_H = -0.46*x_Be+2.54
+        
+        Arguments
+            x_Be: x coordinate of the Be atom
+        
+        Returns
+            Be_xyz+H2_xyz: string with xyz coordinates of BeH2
+        '''
+        if x_Be <= 4:
+            z_H = -0.46*x_Be+2.54
+        else:
+            z_H = 0.7
+        
+        # Converting into Angstroms
+        x_Be *= 0.529177
+        z_H *= 0.529177
+
+        Be_xyz = f'Be {x_Be:.6f} 0.000000 0.000000; '
+        H2_xyz = f'H 0.000000 0.000000 {np.abs(z_H):.6f}; H 0.000000 0.000000 -{np.abs(z_H):.6f}'
+
+        return Be_xyz+H2_xyz
+
+    geometry = Be_ins_coords(float(molecule.split('-')[1].strip()))
+
 
 
 mol_obj = gto.Mole()
@@ -94,6 +126,7 @@ cas_obj = hf_obj.CASCI(nMO, nEL)
 cas_obj.kernel()
 
 cas_en = cas_obj.e_tot-mol_obj.enuc
+cas_rdm1 = cas_obj.make_rdm1()
 
 print(f'Energy HF: {hf_obj.energy_tot()-mol_obj.enuc}, Energy CAS: {cas_en}')
 
@@ -116,14 +149,32 @@ WF = WaveFunctionUPS(
         include_active_kappa=True,
     )
 
-# Add energy evaluation counter attribute
-WF.num_energy_evals = 0
+#Energy Hamiltonian Fermionic operator
+Hamiltonian = hamiltonian_0i_0a(
+    WF.h_mo,
+    WF.g_mo,
+    WF.num_inactive_orbs,
+    WF.num_active_orbs,
+)
 
 en_traj = [hf_obj.energy_tot()-mol_obj.enuc]
 rdm1_traj = [WF.rdm1]
 pool_data = adapt_utils.pool(WF, so_ir, gen)
 
 pool_data = adapt_utils.pool(WF, so_ir, gen)
+pool_Ncomm_qubit = 0
+
+#define mapper
+mapper = JordanWignerMapper()
+
+# Number of Pauli strings for Hamiltonian -> cost Hamiltonian evaluation
+NHam_qubit = len(mapper.map(FermionicOp(Hamiltonian.get_qiskit_form(WF.num_orbs), WF.num_spin_orbs)).paulis)
+
+# Sum pauli strings for each commutator in the pool -> cost gradient evaluation in the pool
+for T in pool_data["excitation operator"]:
+
+    comm = commutator(T, Hamiltonian)
+    pool_Ncomm_qubit += len(mapper.map(FermionicOp(comm.get_qiskit_form(WF.num_orbs), WF.num_spin_orbs)).paulis)
 
 def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
     '''Run Adapt VQE algorithm
@@ -138,14 +189,6 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
 
     # ADAPT ANSATZ + VQE
     for j in range(maxiter):
-
-        #Energy Hamiltonian Fermionic operator
-        Hamiltonian = hamiltonian_0i_0a(
-            WF.h_mo,
-            WF.g_mo,
-            WF.num_inactive_orbs,
-            WF.num_active_orbs,
-        )
 
         #Apply operator to state -> obtain new state (list of operators, state, info on CI space, active space params)
         H_ket = propagate_state([Hamiltonian], WF.ci_coeffs, WF.ci_info, WF.thetas, WF.ups_layout)
@@ -195,19 +238,24 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
             break
 
         #Update ansatz with new excitation operator (corresponding to max gradient)
-        WF.ups_layout.excitation_indices.append(np.array(pool_data["excitation indeces"][max_arg])-WF.num_inactive_spin_orbs) # rescale indeces to stay only in active space (?)
+        WF.ups_layout.n_params += 1
+        WF.ups_layout.excitation_indices.append(pool_data["excitation indeces"][max_arg]) # rescale indeces to stay only in active space (?)
         WF.ups_layout.excitation_operator_type.append(pool_data["excitation type"][max_arg])
+        WF.ups_layout.grad_param_R[f"p{WF.ups_layout.n_params:09d}"] = 2
+        WF.ups_layout.param_names.append(f"p{WF.ups_layout.n_params:09d}")
         #del excitation_pool[max_arg]
         #del excitation_pool_type[max_arg]
-        WF.ups_layout.n_params += 1
         
         # add theta parameter for new operator
         WF._thetas.append(0.0)
         # np.append(WF._thetas, 0.0)
 
         # VQE optimization
+        # from rotoadapt_utils import rotosolve
+
         if full_opt == True:
             WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=False) # full VQE optimization
+            # WF = rotosolve(WF)
 
         if full_opt == False:
             WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=True) # Optimize only last unitary
@@ -250,28 +298,43 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
 
 epoch_ca = 1.6e-3
 
-WF, en_traj, rdm1_traj = do_adapt(WF, epoch=epoch_ca, maxiter=50)
+WF, en_traj, rdm1_traj = do_adapt(WF, epoch=epoch_ca, maxiter=1000)
+
+# Total cost: cost_pool_evaluation * num_layers + cost VQE
+cost_pool = int(pool_Ncomm_qubit)*WF.ups_layout.n_params
+# cost_pool = int((WF.ups_layout.n_params)*4*len(pool_data['excitation indeces'])*NHam_qubit)
+cost_VQE = int(WF.num_energy_evals*NHam_qubit)
+
+num_en_evals = cost_pool + cost_VQE
+print(f'COST POOL: {cost_pool} - COST VQE: {int(WF.num_energy_evals*NHam_qubit)}')
+
 
 output = {'molecule': molecule,
-          'ci_ref': cas_obj.e_tot-mol_obj.enuc, # CASCI reference energy
+         'ref_data': {'elec_en_ref': cas_obj.e_tot-mol_obj.enuc,
+                       'nuc_en_ref': mol_obj.enuc,
+                       'rdm1_ref': cas_rdm1,
+                       }, # CASCI reference data
           'en_traj': np.array(en_traj), # array of electronic energie shape=(#layers)
           'rdm1_traj': rdm1_traj, # rdm1 over the whole trajectory WF object
-          'num_en_evals': WF.num_energy_evals,
+          'num_en_evals': {'num_en_evals': num_en_evals,
+                           'cost_pool': cost_pool,
+                            'cost_VQE': cost_VQE
+                            },  # optimization total cost
           'ansatz_data': {'num_layers': WF.ups_layout.n_params,
                           'excitation_idx': WF.ups_layout.excitation_indices,
                           'excitation_op_type': WF.ups_layout.excitation_operator_type,
-                          'thetas': WF.thetas
+                          'thetas': WF.thetas,
                           },
           }
 
 ## OUTPUT ONLY LAST OPTIMIZATION
 
 if full_opt == True:
-    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR.pkl'), 'wb') as f:
+    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-GR.pkl'), 'wb') as f:
         pickle.dump(output, f)
 
 if full_opt == False:
-    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-GR_last_opt.pkl'), 'wb') as f:
+    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-GR_last_opt.pkl'), 'wb') as f:
         pickle.dump(output, f)    
 
 

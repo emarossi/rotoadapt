@@ -8,7 +8,6 @@ from slowquant.unitary_coupled_cluster.operator_state_algebra import expectation
 from slowquant.unitary_coupled_cluster.util import iterate_t1, iterate_t2, iterate_t1_generalized, iterate_t2_generalized
 from slowquant.unitary_coupled_cluster.operators import G1, G2
 
-
 def pool(WF, so_ir, generalized):
     '''
     Defines the excitation pool and implements symmetry filter.
@@ -55,32 +54,6 @@ def pool(WF, so_ir, generalized):
             pool_data["excitation indeces"].append((i, j, a, b))
             pool_data["excitation type"].append("double")
             pool_data["excitation operator"].append(G2(i, j, a, b, True))
-
-    # Pruning away symmetry-forbidden excitations
-
-    for num, excitation in enumerate(pool_data["excitation indeces"]):
-
-        if len(excitation) == 2:
-
-            i, a = excitation
-
-            if so_ir[i] != so_ir[a]:
-                del pool_data["excitation indeces"][num]
-                del pool_data["excitation type"][num]
-                del pool_data["excitation operator"][num]
-
-        if len(excitation) == 4:
-
-            i, j, a, b = excitation
-
-            if (so_ir[i] != so_ir[a] != so_ir[j] != so_ir[b]
-                or so_ir[i] != so_ir[j] and so_ir[a] != so_ir[b]
-                or so_ir[i] != so_ir[a] and so_ir[j] != so_ir[b]
-                or so_ir[i] != so_ir[b] and so_ir[j] != so_ir[a]):
-
-                del pool_data["excitation indeces"][num]
-                del pool_data["excitation type"][num]
-                del pool_data["excitation operator"][num]
 
     return pool_data
 

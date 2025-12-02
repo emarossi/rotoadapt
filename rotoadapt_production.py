@@ -18,6 +18,10 @@ from slowquant.unitary_coupled_cluster.operator_state_algebra import propagate_s
 # Wave function ansatz - unitary product state
 from slowquant.unitary_coupled_cluster.ups_wavefunction import WaveFunctionUPS
 
+# Qiskit utils to get number of measurements
+from qiskit_nature.second_q.operators import FermionicOp
+from qiskit_nature.second_q.mappers import JordanWignerMapper
+
 # Functions for rotoadapt
 import rotoadapt_utils
 
@@ -57,12 +61,42 @@ if molecule == 'LiH':
     geometry = 'H 0.000000 0.000000 0.000000; Li 3.0000 0.00000 0.000000' #LiH stretched
 
 if molecule == 'N2':
-    geometry = 'N 0.000000 0.000000 0.000000; N 1.0980 0.00000 0.000000' #N2 equilibrium
-    # geometry = 'N 0.000000 0.000000 0.000000; N 2.0980 0.00000 0.000000' #N2 stretched
+    # geometry = 'N 0.000000 0.000000 0.000000; N 1.0980 0.00000 0.000000' #N2 equilibrium
+    geometry = 'N 0.000000 0.000000 0.000000; N 2.0980 0.00000 0.000000' #N2 stretched
 
-if molecule == 'BeH2':
-    # geometry = 'Be 0.000000 0.000000 0.000000; H 1.34000 0.00000 0.000000; H -1.34000 0.00000 0.000000' #BeH2 equilibrium
-    geometry = 'Be 0.000000 0.000000 0.000000; H 2.34000 0.00000 0.000000; H -2.34000 0.00000 0.000000' #BeH2 stretched
+if molecule == 'H6': # stretched H6
+    geometry = "H -7.500000 0.000000 0.000000; H -4.500000 0.000000 0.000000; H -1.500000 0.000000 0.000000; H 1.500000 0.000000 0.000000; H 4.500000 0.000000 0.000000; H 7.500000 0.000000 0.000000"
+
+## BeH2 INSERTION PROBLEM
+if 'BeH2' in molecule:
+
+    def Be_ins_coords(x_Be):
+        '''
+        Generates coordinates for BeH2 insertion
+        Be moving along x, H2 moving along z according to:
+        z_H = -0.46*x_Be+2.54
+        
+        Arguments
+            x_Be: x coordinate of the Be atom
+        
+        Returns
+            Be_xyz+H2_xyz: string with xyz coordinates of BeH2
+        '''
+        if x_Be <= 4:
+            z_H = -0.46*x_Be+2.54
+        else:
+            z_H = 0.7
+        
+        # Converting into Angstroms
+        x_Be *= 0.529177
+        z_H *= 0.529177
+
+        Be_xyz = f'Be {x_Be:.6f} 0.000000 0.000000; '
+        H2_xyz = f'H 0.000000 0.000000 {np.abs(z_H):.6f}; H 0.000000 0.000000 -{np.abs(z_H):.6f}'
+
+        return Be_xyz+H2_xyz
+
+    geometry = Be_ins_coords(float(molecule.split('-')[1].strip()))
 
 mol_obj = gto.Mole()
 mol_obj.build(atom = geometry, basis = 'sto-3g', symmetry='c2v')
@@ -107,6 +141,20 @@ WF = WaveFunctionUPS(
         include_active_kappa=True,
     )
 
+#Energy Hamiltonian Fermionic operator
+Hamiltonian = hamiltonian_0i_0a(
+    WF.h_mo,
+    WF.g_mo,
+    WF.num_inactive_orbs,
+    WF.num_active_orbs,
+)
+
+#define mapper
+mapper = JordanWignerMapper()
+
+# Number of Pauli strings for Hamiltonian -> cost Hamiltonian evaluation
+NHam_qubit = len(mapper.map(FermionicOp(Hamiltonian.get_qiskit_form(WF.num_orbs), WF.num_spin_orbs)).paulis)
+
 ## DEFINE EXCITATION POOL -> dictionary with data
 
 pool_data = rotoadapt_utils.pool(WF, so_ir, gen)
@@ -136,27 +184,39 @@ if full_opt == True:
 if full_opt == False:
     WF, en_traj, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect(WF, pool_data, cas_en)  # rotoselect - no optimization
 
+# Count number of measurements (#layers * 4 * #op_pool * #Pauli_strings_H) + VQE cost
+cost_pool = int((WF.ups_layout.n_params)*4*len(pool_data['excitation indeces'])*NHam_qubit)
+cost_VQE = int(WF.num_energy_evals*NHam_qubit)
+
+num_en_evals = cost_pool + cost_VQE
+
+print(f'COST POOL: {cost_pool} - COST VQE: {cost_VQE}')
+
 # SAVING RELEVANT OBJECTS
 
 output = {'molecule': molecule,
-          'ref_data': {'en_ref': cas_obj.e_tot-mol_obj.enuc,
-                       'rdm1_ref': cas_rdm1
+          'ref_data': {'elec_en_ref': cas_obj.e_tot-mol_obj.enuc,
+                       'nuc_en_ref': mol_obj.enuc,
+                       'rdm1_ref': cas_rdm1,
                        }, # CASCI reference data
           'en_traj': np.array(en_traj), # array of electronic energie shape=(#layers)
           'rdm1_traj': rdm1_traj, # rdm1 over the whole trajectory WF object
           'rdm2_traj': rdm2_traj, # rdm1 over the whole trajectory WF object
-          'num_en_evals': WF.num_energy_evals,  # optimization total cost
+          'num_en_evals': {'num_en_evals': num_en_evals,
+                           'cost_pool': cost_pool,
+                            'cost_VQE': cost_VQE
+                            },  # optimization total cost
           'ansatz_data': {'num_layers': WF.ups_layout.n_params,
                           'excitation_idx': WF.ups_layout.excitation_indices,
                           'excitation_op_type': WF.ups_layout.excitation_operator_type,
-                          'thetas': WF.thetas
+                          'thetas': WF.thetas,
                           },
           }
 
 if full_opt == True:
 
     if gen == False:
-        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT.pkl'), 'wb') as f:
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RS_OPT.pkl'), 'wb') as f:
             pickle.dump(output, f)
 
     if gen == True:
@@ -164,5 +224,5 @@ if full_opt == True:
             pickle.dump(output, f)
 
 if full_opt == False:
-    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS.pkl'), 'wb') as f:
+    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RS.pkl'), 'wb') as f:
         pickle.dump(output, f)
