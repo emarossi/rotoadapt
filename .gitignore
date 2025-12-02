@@ -153,3 +153,5 @@ dmypy.json
 
 *.png
 *.pkl
+
+SlowQuant/
