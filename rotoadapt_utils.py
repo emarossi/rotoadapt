@@ -72,7 +72,7 @@ def energy_landscape(A, B, C, D, E, theta):
 
 def global_min_search(A, B, C, D, E):
     """
-    Find the global minimum of energy landscape using the compation matrix method
+    Find the global minimum of energy landscape using the companion matrix method
     E(theta) = A + B*cos(theta) + C*sin(theta) + D*cos(2*theta) + E*sin(2*theta)
 
     Arguments
@@ -136,7 +136,7 @@ def global_min_search(A, B, C, D, E):
             Cmat = cmat_builder([-p0/p2, -p1/p2, 1])
             
         else:
-            Cmat = cmat_builder([-p0/p2, 1])
+            Cmat = cmat_builder([-p0/p1, 1])
 
         # Eigenvalues of Cmat are roots of the quartic polynomial = zeroes of derivative function
         roots = np.linalg.eigvals(Cmat)
@@ -227,6 +227,202 @@ def pool_evaluator(WF, pool_index, pool_data, E_prev):
 
     return theta_min, E_min
 
+def energy_landscape_2(A, B, C, theta):
+    '''
+    Energy landscape according to PRA 111, 042825 (2025) - eq. 12
+    '''
+    return A + np.sin(theta)*B + (1 - np.cos(theta))*C
+    # return A + B*0.5*np.sin(2*theta) + C*0.5*np.sin(theta)**2
+
+
+def global_min_search_2(A, B, C):
+    """
+    Find the global minimum of energy landscape using the companion matrix method
+    E(theta) = A + sin(theta)*B + (1 - cos(theta))*C
+
+    Arguments
+        A, B, C
+    
+    Returns
+        theta_min: the angle (radians) giving the minimum energy
+        E_min: the minimum energy
+    """
+    # Coefficients of derivative in terms of sin/cos
+    # dE/dtheta = cos(theta)*B + sin(theta)*C
+    # Find zeros of derivative
+    
+    # Used Weierstrass substitution x = tan(theta/2)
+    # sin(theta) = 2*x/(1+x^2), cos(theta) = (1-x^2)/(1+x^2)
+    # Multiply by (1+x^2)^2 to get quadratic polynomial: p2*x^2 + p1*x + p0 = 0
+    
+    theta_min = np.arctan2(-B, C)
+    energy_min = energy_landscape_2(A, B, C, theta_min)
+
+    print(f'The optimal angle is: {theta_min} - the corresponding energy is: {energy_landscape_2(A, B, C, theta_min)}' )
+
+
+    # p2 = -B
+    # p1 = 2*C
+    # p0 = B
+
+    # # Determine polynomial degree
+    # coeffs_array = np.array([p0, p1, p2])
+
+    # if np.abs(p2) > 0:
+    #     order = 2
+
+    # elif np.abs(p1) > 0:
+    #     order = 1
+    
+    # else:
+    #     order = 0
+
+
+    # alpha = np.max(np.abs(coeffs_array))*1e-6
+    
+    # for num in np.abs(coeffs_array):
+    #     if num < alpha:
+    #         order -= 1
+    #     else:
+    #         continue
+    
+    # print(f'the polynomial grade is: {order}')
+
+
+
+    # Checking if polynomial is not zero -> can happen with generalized excitation ops
+    # if not np.all(coeffs_array == 0):
+
+    #     def cmat_builder(coeffs):
+    #         """
+    #         Build the companion matrix for a normalized polynomial.
+            
+    #         Arguments
+    #             coeffs: coeffs of monic polynomial (normalized to leading order) with minus sign (last = 1)
+            
+    #         Returns
+    #             CM: companion matrix 
+    #         """
+    #         deg = len(coeffs) - 1
+    #         if deg < 1:
+    #             return None
+    #         Cmat = np.zeros((deg, deg))
+    #         Cmat[1:, :-1] = np.eye(deg - 1)
+    #         Cmat[:, -1] = coeffs[:-1]
+
+    #         return Cmat
+
+    #     # Checking the order of the polynomial -> getting corresponding companion matrix
+
+    #     print(f'The coefficients are->  p0:{p0}; p1:{p1}; p2:{p2};')
+
+    #     if order == 2:
+    #         Cmat = cmat_builder([-p0/p2, -p1/p2, 1])
+
+    #     elif order == 1:
+    #         Cmat = cmat_builder([-p0/p1, 1])
+
+    #     elif order == 0:
+    #         theta_min = 0
+    #         energy_min = energy_landscape_2(A, B, C, theta_min)
+
+        # if np.abs(p2) > np.abs(p1)*tol:
+        #     Cmat = cmat_builder([-p0/p2, -p1/p2, 1])
+            
+        # elif np.abs(p1) > np.abs(p0)*tol:
+        #     Cmat = cmat_builder([-p0/p2, 1])
+
+        # else:
+        #     Cmat = cmat_builder([1])
+
+        # Eigenvalues of Cmat are roots of the quartic polynomial = zeroes of derivative function
+    #     if order != 0:
+
+    #         roots = np.linalg.eigvals(Cmat)
+    
+    #         # Keep only real roots
+    #         real_roots = roots[np.isreal(roots)].real
+    
+    #         # Convert x -> theta
+    #         thetas = 2 * np.arctan(real_roots)
+    
+    #     # Evaluate energy at candidate points and find global minimum
+    #         energies = energy_landscape_2(A, B, C, thetas)
+    #         idx_min = np.argmin(energies)
+    #         theta_min = thetas[idx_min]
+    #         energy_min = energies[idx_min]
+
+    # else:
+    #     theta_min = 0
+    #     energy_min = 0
+    
+    return theta_min, energy_min
+
+def optimizer_2(thetas, energies):
+    '''
+    Solves systems of equations for coefficients of energy landscape
+
+    Arguments
+        thetas: list of thetas where landscape is sampled
+        energies: list of energy samples of landscape at thetas
+
+    Returns
+        theta_min: theta for minimum
+        energy_min: energy minimum
+    '''
+    X = np.column_stack([np.ones_like(thetas), 
+                         np.sin(thetas), 
+                         1-np.cos(thetas), 
+                         ])
+                
+    coeffs = np.linalg.solve(X, energies)
+    A, B, C = coeffs
+
+    theta_min, energy_min = global_min_search_2(A, B, C)
+
+    return theta_min, energy_min
+
+
+def pool_evaluator_2(WF, pool_index, pool_data, E_prev):
+    '''
+    Extends ansatz with candidate unitary from pool
+    Finds global minimum using companion matrix method
+    
+    Arguments
+        WF: WF object from SlowQuant from previous iteration
+        pool_index: index of considered unitary in pool list
+        H: hamiltonian
+        pool_data: dictionary with info on pool operators
+    
+    Returns
+        E_min: absolute minimum of energy
+        theta_min: theta at absolute minimum of energy
+    '''
+    excitation_pool = pool_data["excitation indeces"]
+    excitation_pool_type = pool_data["excitation type"]
+
+    # Updating last layer with the pool candidate
+    WF.ups_layout.excitation_indices[-1] = excitation_pool[pool_index]
+    WF.ups_layout.excitation_operator_type[-1] = excitation_pool_type[pool_index]
+
+    # Energy measurements to build system of equations
+    energies = [E_prev]
+    thetas = [0.0]
+
+    for l in range(1,3):
+        current_thetas = WF.thetas        
+        current_thetas[-1] = (2*np.pi*l)/3
+        WF.thetas = current_thetas
+        energies.append(WF.energy_elec)
+        thetas.append((2*np.pi*l)/3)
+
+    Thetas = np.array(thetas)
+    Energies = np.array(energies)
+
+    # Find energy landscape and its global minimum
+    theta_min, E_min = optimizer_2(Thetas, Energies)
+
+    return theta_min, E_min
 
 def pool_parallel(WF, H, pool_data, E_prev):
     '''
@@ -331,7 +527,9 @@ def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_thresh
 
         # Looping through pool operator -> get the best ansatz
         for i in range(len(excitation_pool)):
-            results.append(pool_evaluator(WF, i, pool_data, E_prev_adapt))
+            # results.append(pool_evaluator(WF, i, pool_data, E_prev_adapt))
+            results.append(pool_evaluator_2(WF, i, pool_data, E_prev_adapt))
+
 
         # results = pool_parallel(WF, H, pool_data, E_prev_adapt)
         theta_pool, energy_pool = zip(*results)
@@ -423,7 +621,11 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
         results = []
 
         for i in range(len(excitation_pool)):
-            results.append(pool_evaluator(WF, i, pool_data, E_prev_adapt))
+            # results.append(pool_evaluator(WF, i, pool_data, E_prev_adapt))
+            results.append(pool_evaluator_2(WF, i, pool_data, E_prev_adapt))
+
+        for i, el in enumerate(results):
+            print(f'OP{i}: The results on the pool are {el}')
 
         # results = pool_parallel(WF, H, pool_data, E_prev_adapt)
         theta_pool, energy_pool = zip(*results)
