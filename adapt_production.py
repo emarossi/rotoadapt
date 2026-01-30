@@ -33,8 +33,9 @@ parser = argparse.ArgumentParser(description="rodoadapt script - returns energy 
 # Add arguments
 parser.add_argument("--mol", type=str, required = True, help="Molecule (H2O, LiH)")
 parser.add_argument("--AS", type=int, nargs=2, required = True, help="Active space nEL nMO")
-parser.add_argument("--gen", type=bool, default = False, help="Generalized excitation operators")
-parser.add_argument("--full_opt", type=bool, default = False, help="full VQE optimization")
+parser.add_argument("--gen", action="store_true", help="Generalized excitation operators")
+parser.add_argument("--po", action="store_true", help="Unitary parameter optimization")
+parser.add_argument("--oo", action="store_true", help="Orbital optimization")
 
 # Parse arguments
 args = parser.parse_args()
@@ -42,7 +43,8 @@ args = parser.parse_args()
 molecule = args.mol  # molecule specifics via string
 AS = args.AS  # active space (nEL, nMO)
 gen = args.gen
-full_opt = args.full_opt
+po = args.po
+oo = args.oo
 
 # Getting path to current and parent folder
 parent_folder = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
@@ -51,12 +53,16 @@ results_folder = os.path.join(parent_folder, "rotoadapt_analysis")
 ## DEFINE MOLECULE IN PYSCF
 
 if molecule == 'H2O':
-    # geometry = 'O 0.000000 0.000000 0.000000; H 0.960000 0.000000 0.000000; H -0.240365 0.929422 0.000000' #H2O equilibrium
-    geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA) 
+    geometry = 'O 0.000000 0.000000 0.000000; H 0.960000 0.000000 0.000000; H -0.240365 0.929422 0.000000' #H2O equilibrium
+    # geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA) 
 
 if molecule == 'LiH':
-    # geometry = 'H 0.000000 0.000000 0.000000; Li 1.595000 0.00000 0.000000' #LiH equilibrium
-    geometry = 'H 0.000000 0.000000 0.000000; Li 3.0000 0.00000 0.000000' #LiH stretched
+    geometry = 'H 0.000000 0.000000 0.000000; Li 1.595000 0.00000 0.000000' #LiH equilibrium
+    # geometry = 'H 0.000000 0.000000 0.000000; Li 3.0000 0.00000 0.000000' #LiH stretched
+
+if molecule == 'BeH2':
+    geometry = 'Be 0.000000 0.000000 0.000000; H 1.33376 0.000000 0.000000; H -1.33376 0.000000 0.000000' #BeH2 equilibrium
+    # geometry = 'Be 0.000000 0.000000 0.000000; H 1.33376 0.000000 0.000000; H -1.33376 0.000000 0.000000' #BeH2 triangular
 
 if molecule == 'N2':
     geometry = 'N 0.000000 0.000000 0.000000; N 2.0980 0.00000 0.000000' #N2 stretched
@@ -65,37 +71,35 @@ if molecule == 'H6': #stretched H6
     geometry = "H -7.500000 0.000000 0.000000; H -4.500000 0.000000 0.000000; H -1.500000 0.000000 0.000000; H 1.500000 0.000000 0.000000; H 4.500000 0.000000 0.000000; H 7.500000 0.000000 0.000000"
 
 ## BeH2 INSERTION PROBLEM
-if 'BeH2' in molecule:
+# if 'BeH2' in molecule:
 
-    def Be_ins_coords(x_Be):
-        '''
-        Generates coordinates for BeH2 insertion
-        Be moving along x, H2 moving along z according to:
-        z_H = -0.46*x_Be+2.54
+#     def Be_ins_coords(x_Be):
+#         '''
+#         Generates coordinates for BeH2 insertion
+#         Be moving along x, H2 moving along z according to:
+#         z_H = -0.46*x_Be+2.54
         
-        Arguments
-            x_Be: x coordinate of the Be atom
+#         Arguments
+#             x_Be: x coordinate of the Be atom
         
-        Returns
-            Be_xyz+H2_xyz: string with xyz coordinates of BeH2
-        '''
-        if x_Be <= 4:
-            z_H = -0.46*x_Be+2.54
-        else:
-            z_H = 0.7
+#         Returns
+#             Be_xyz+H2_xyz: string with xyz coordinates of BeH2
+#         '''
+#         if x_Be <= 4:
+#             z_H = -0.46*x_Be+2.54
+#         else:
+#             z_H = 0.7
         
-        # Converting into Angstroms
-        x_Be *= 0.529177
-        z_H *= 0.529177
+#         # Converting into Angstroms
+#         x_Be *= 0.529177
+#         z_H *= 0.529177
 
-        Be_xyz = f'Be {x_Be:.6f} 0.000000 0.000000; '
-        H2_xyz = f'H 0.000000 0.000000 {np.abs(z_H):.6f}; H 0.000000 0.000000 -{np.abs(z_H):.6f}'
+#         Be_xyz = f'Be {x_Be:.6f} 0.000000 0.000000; '
+#         H2_xyz = f'H 0.000000 0.000000 {np.abs(z_H):.6f}; H 0.000000 0.000000 -{np.abs(z_H):.6f}'
 
-        return Be_xyz+H2_xyz
+#         return Be_xyz+H2_xyz
 
-    geometry = Be_ins_coords(float(molecule.split('-')[1].strip()))
-
-
+#     geometry = Be_ins_coords(float(molecule.split('-')[1].strip()))
 
 mol_obj = gto.Mole()
 mol_obj.build(atom = geometry, basis = 'sto-3g', symmetry='c2v')
@@ -148,7 +152,14 @@ Hamiltonian = hamiltonian_0i_0a(
 en_traj = [hf_obj.energy_tot()-mol_obj.enuc]
 rdm1_traj = [WF.rdm1]
 
-pool_data = adapt_utils.pool(WF, so_ir, gen)
+if oo == True:
+    pool_data = adapt_utils.pool_D(WF, so_ir, gen)
+    print('D pool')
+
+if oo == False:
+    pool_data = adapt_utils.pool_SD(WF, so_ir, gen)
+    print('SD pool')
+
 pool_Ncomm_qubit = 0
 
 #define mapper
@@ -163,7 +174,7 @@ for T in pool_data["excitation operator"]:
     comm = commutator(T, Hamiltonian)
     pool_Ncomm_qubit += len(mapper.map(FermionicOp(comm.get_qiskit_form(WF.num_orbs), WF.num_spin_orbs)).paulis)
 
-def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
+def do_adapt(WF, maxiter, epoch=1e-6):
     '''Run Adapt VQE algorithm
     
     args:
@@ -230,27 +241,30 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
         WF.ups_layout.excitation_operator_type.append(pool_data["excitation type"][max_arg])
         WF.ups_layout.grad_param_R[f"p{WF.ups_layout.n_params:09d}"] = 2
         WF.ups_layout.param_names.append(f"p{WF.ups_layout.n_params:09d}")
-        #del excitation_pool[max_arg]
-        #del excitation_pool_type[max_arg]
-        
-        # add theta parameter for new operator
         WF._thetas.append(0.0)
-        # np.append(WF._thetas, 0.0)
 
         # VQE optimization
         # from rotoadapt_utils import rotosolve
 
-        if full_opt == True:
-            WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=False) # full VQE optimization
+        if po == True and oo == False:
+            WF.run_wf_optimization_1step("slsqp", orbital_optimization = False) # full VQE optimization
             # WF = rotosolve(WF)
+        
+        if po == True and oo == True:
+            WF.run_wf_optimization_1step("slsqp", orbital_optimization = True) # full VQE optimization
 
-        if full_opt == False:
-            WF.run_wf_optimization_1step("slsqp", orbital_optimization=orbital_opt, opt_last=True) # Optimize only last unitary
+        if po == False and oo == False:
+            WF.run_wf_optimization_1step("slsqp", orbital_optimization = False, opt_last=True) # Optimize only last unitary
+
+        if po == False and oo == True:
+            WF.run_wf_optimization_1step("slsqp", orbital_optimization = False, opt_last=True) # Optimize only last unitary
+            WF.run_orbital_optimization()
+
 
         deltaE_adapt = np.abs(cas_en-WF.energy_elec)
         rdm1_traj.append(WF.rdm1)
 
-        if deltaE_adapt < epoch:
+        if deltaE_adapt < epoch or WF.ups_layout.n_params >= 10:
             en_traj.append(WF.energy_elec)
             # Final printout
             print('----------------------')
@@ -262,6 +276,7 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
 
         else:
             en_traj.append(WF.energy_elec)
+            print(f'RESULT - Energy: {en_traj[-1]} - #Layers: {WF.ups_layout.n_params} - DeltaE: {deltaE_adapt}')
             print('#########CI COEFFS########')
             print(WF.ci_coeffs)
             print('#########################')
@@ -269,6 +284,7 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
             print()
             print("------TP Printing the Optimised Theta")
             print("------TP ############################")
+
             
             print(
                     f"------TP {str("Thetas").center(27)} | {str("UPS Layout indices").center(18)} | {str("Excitation indices").center(18)} | {str("UPS Layout type").center(27)}"
@@ -284,8 +300,7 @@ def do_adapt(WF, maxiter, epoch=1e-6 , orbital_opt: bool = False):
     return WF, en_traj, rdm1_traj
 
 # Define epoch for chemical accuracy
-
-epoch_ca = 1.6e-3
+epoch_ca = 1e-5
 
 WF, en_traj, rdm1_traj = do_adapt(WF, epoch=epoch_ca, maxiter=1000)
 
@@ -316,12 +331,72 @@ output = {'molecule': molecule,
                           },
           }
 
-## OUTPUT ONLY LAST OPTIMIZATION
+## OUTPUT
 
-if full_opt == True:
-    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-GR.pkl'), 'wb') as f:
-        pickle.dump(output, f)
+if gen == True:
 
-if full_opt == False:
-    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-GR_last_opt.pkl'), 'wb') as f:
-        pickle.dump(output, f)    
+    if po == True and oo == False:
+
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-GB-full-gen.pkl'), 'wb') as f:
+            pickle.dump(output, f)
+
+        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-GB-full-gen.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)
+
+    elif po == False and oo == False:
+
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-GB-last-gen.pkl'), 'wb') as f:
+            pickle.dump(output, f)
+
+        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-GB-last-gen.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)
+
+    elif po == False and oo == True:
+
+        with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-GB-last-gen.pkl'), 'wb') as f:
+            pickle.dump(output, f)
+
+        # with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-str-GB-last-gen.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)
+
+    elif po == True and oo == True:
+
+        with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-GB-full-gen.pkl'), 'wb') as f:
+            pickle.dump(output, f)
+
+        # with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-str-GB-full-gen.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)
+
+else:
+
+    if po == True and oo == False:
+
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-GB-full.pkl'), 'wb') as f:
+            pickle.dump(output, f)
+
+        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-GB-full.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)
+
+    elif po == False and oo == False:
+
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-GB-last.pkl'), 'wb') as f:
+            pickle.dump(output, f)
+
+        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-GB-last.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)
+
+    elif po == False and oo == True:
+
+        with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-GB-last.pkl'), 'wb') as f:
+            pickle.dump(output, f)
+
+        # with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-str-GB-last.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)
+
+    elif po == True and oo == True:
+
+        with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-GB-full.pkl'), 'wb') as f:
+            pickle.dump(output, f)
+
+        # with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-str-GB-full.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)

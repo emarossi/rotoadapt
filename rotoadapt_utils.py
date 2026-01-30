@@ -8,9 +8,9 @@ from slowquant.unitary_coupled_cluster.operator_state_algebra import expectation
 from slowquant.unitary_coupled_cluster.util import iterate_t1, iterate_t2, iterate_t1_generalized, iterate_t2_generalized
 from slowquant.unitary_coupled_cluster.operators import G1, G2
 
-def pool(WF, so_ir, generalized):
+def pool_SD(WF, so_ir, generalized):
     '''
-    Defines the excitation pool and implements symmetry filter.
+    Defines the excitation pool.
 
     Arguments
         WF: SlowQuant wave function object
@@ -48,6 +48,43 @@ def pool(WF, so_ir, generalized):
             pool_data["excitation indeces"].append((i, a))            
             pool_data["excitation type"].append("single")
             pool_data["excitation operator"].append(G1(i, a, True))
+
+        ## Generate indeces for doubly-excited operators
+        for a, i, b, j in iterate_t2(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
+            pool_data["excitation indeces"].append((i, j, a, b))
+            pool_data["excitation type"].append("double")
+            pool_data["excitation operator"].append(G2(i, j, a, b, True))
+
+    return pool_data
+
+def pool_D(WF, so_ir, generalized):
+    '''
+    Defines the excitation pool.
+
+    Arguments
+        WF: SlowQuant wave function object
+        so_ir: list of irreducible representation labels for each spin orbital
+        generalized: generalized pool or not?->Bool
+
+    Returns
+        pool_data: pool data with symmetry allowed excitations
+    '''
+    pool_data = {
+    "excitation indeces": [],
+    "excitation type": [],
+    "excitation operator": []
+    }
+
+    ## GENERALIZED vs P-H excitation pool -> first layer always P-H since HF is always reference
+    if generalized == True:
+
+        ## Generate indeces for doubly-excited operators
+        for a, i, b, j in iterate_t2_generalized(WF.num_spin_orbs):
+            pool_data["excitation indeces"].append((i, j, a, b))
+            pool_data["excitation type"].append("double")
+            pool_data["excitation operator"].append(G2(i, j, a, b, True))
+
+    else:
 
         ## Generate indeces for doubly-excited operators
         for a, i, b, j in iterate_t2(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
@@ -227,203 +264,6 @@ def pool_evaluator(WF, pool_index, pool_data, E_prev):
 
     return theta_min, E_min
 
-def energy_landscape_2(A, B, C, theta):
-    '''
-    Energy landscape according to PRA 111, 042825 (2025) - eq. 12
-    '''
-    return A + np.sin(theta)*B + (1 - np.cos(theta))*C
-    # return A + B*0.5*np.sin(2*theta) + C*0.5*np.sin(theta)**2
-
-
-def global_min_search_2(A, B, C):
-    """
-    Find the global minimum of energy landscape using the companion matrix method
-    E(theta) = A + sin(theta)*B + (1 - cos(theta))*C
-
-    Arguments
-        A, B, C
-    
-    Returns
-        theta_min: the angle (radians) giving the minimum energy
-        E_min: the minimum energy
-    """
-    # Coefficients of derivative in terms of sin/cos
-    # dE/dtheta = cos(theta)*B + sin(theta)*C
-    # Find zeros of derivative
-    
-    # Used Weierstrass substitution x = tan(theta/2)
-    # sin(theta) = 2*x/(1+x^2), cos(theta) = (1-x^2)/(1+x^2)
-    # Multiply by (1+x^2)^2 to get quadratic polynomial: p2*x^2 + p1*x + p0 = 0
-    
-    theta_min = np.arctan2(-B, C)
-    energy_min = energy_landscape_2(A, B, C, theta_min)
-
-    print(f'The optimal angle is: {theta_min} - the corresponding energy is: {energy_landscape_2(A, B, C, theta_min)}' )
-
-
-    # p2 = -B
-    # p1 = 2*C
-    # p0 = B
-
-    # # Determine polynomial degree
-    # coeffs_array = np.array([p0, p1, p2])
-
-    # if np.abs(p2) > 0:
-    #     order = 2
-
-    # elif np.abs(p1) > 0:
-    #     order = 1
-    
-    # else:
-    #     order = 0
-
-
-    # alpha = np.max(np.abs(coeffs_array))*1e-6
-    
-    # for num in np.abs(coeffs_array):
-    #     if num < alpha:
-    #         order -= 1
-    #     else:
-    #         continue
-    
-    # print(f'the polynomial grade is: {order}')
-
-
-
-    # Checking if polynomial is not zero -> can happen with generalized excitation ops
-    # if not np.all(coeffs_array == 0):
-
-    #     def cmat_builder(coeffs):
-    #         """
-    #         Build the companion matrix for a normalized polynomial.
-            
-    #         Arguments
-    #             coeffs: coeffs of monic polynomial (normalized to leading order) with minus sign (last = 1)
-            
-    #         Returns
-    #             CM: companion matrix 
-    #         """
-    #         deg = len(coeffs) - 1
-    #         if deg < 1:
-    #             return None
-    #         Cmat = np.zeros((deg, deg))
-    #         Cmat[1:, :-1] = np.eye(deg - 1)
-    #         Cmat[:, -1] = coeffs[:-1]
-
-    #         return Cmat
-
-    #     # Checking the order of the polynomial -> getting corresponding companion matrix
-
-    #     print(f'The coefficients are->  p0:{p0}; p1:{p1}; p2:{p2};')
-
-    #     if order == 2:
-    #         Cmat = cmat_builder([-p0/p2, -p1/p2, 1])
-
-    #     elif order == 1:
-    #         Cmat = cmat_builder([-p0/p1, 1])
-
-    #     elif order == 0:
-    #         theta_min = 0
-    #         energy_min = energy_landscape_2(A, B, C, theta_min)
-
-        # if np.abs(p2) > np.abs(p1)*tol:
-        #     Cmat = cmat_builder([-p0/p2, -p1/p2, 1])
-            
-        # elif np.abs(p1) > np.abs(p0)*tol:
-        #     Cmat = cmat_builder([-p0/p2, 1])
-
-        # else:
-        #     Cmat = cmat_builder([1])
-
-        # Eigenvalues of Cmat are roots of the quartic polynomial = zeroes of derivative function
-    #     if order != 0:
-
-    #         roots = np.linalg.eigvals(Cmat)
-    
-    #         # Keep only real roots
-    #         real_roots = roots[np.isreal(roots)].real
-    
-    #         # Convert x -> theta
-    #         thetas = 2 * np.arctan(real_roots)
-    
-    #     # Evaluate energy at candidate points and find global minimum
-    #         energies = energy_landscape_2(A, B, C, thetas)
-    #         idx_min = np.argmin(energies)
-    #         theta_min = thetas[idx_min]
-    #         energy_min = energies[idx_min]
-
-    # else:
-    #     theta_min = 0
-    #     energy_min = 0
-    
-    return theta_min, energy_min
-
-def optimizer_2(thetas, energies):
-    '''
-    Solves systems of equations for coefficients of energy landscape
-
-    Arguments
-        thetas: list of thetas where landscape is sampled
-        energies: list of energy samples of landscape at thetas
-
-    Returns
-        theta_min: theta for minimum
-        energy_min: energy minimum
-    '''
-    X = np.column_stack([np.ones_like(thetas), 
-                         np.sin(thetas), 
-                         1-np.cos(thetas), 
-                         ])
-                
-    coeffs = np.linalg.solve(X, energies)
-    A, B, C = coeffs
-
-    theta_min, energy_min = global_min_search_2(A, B, C)
-
-    return theta_min, energy_min
-
-
-def pool_evaluator_2(WF, pool_index, pool_data, E_prev):
-    '''
-    Extends ansatz with candidate unitary from pool
-    Finds global minimum using companion matrix method
-    
-    Arguments
-        WF: WF object from SlowQuant from previous iteration
-        pool_index: index of considered unitary in pool list
-        H: hamiltonian
-        pool_data: dictionary with info on pool operators
-    
-    Returns
-        E_min: absolute minimum of energy
-        theta_min: theta at absolute minimum of energy
-    '''
-    excitation_pool = pool_data["excitation indeces"]
-    excitation_pool_type = pool_data["excitation type"]
-
-    # Updating last layer with the pool candidate
-    WF.ups_layout.excitation_indices[-1] = excitation_pool[pool_index]
-    WF.ups_layout.excitation_operator_type[-1] = excitation_pool_type[pool_index]
-
-    # Energy measurements to build system of equations
-    energies = [E_prev]
-    thetas = [0.0]
-
-    for l in range(1,3):
-        current_thetas = WF.thetas        
-        current_thetas[-1] = (2*np.pi*l)/3
-        WF.thetas = current_thetas
-        energies.append(WF.energy_elec)
-        thetas.append((2*np.pi*l)/3)
-
-    Thetas = np.array(thetas)
-    Energies = np.array(energies)
-
-    # Find energy landscape and its global minimum
-    theta_min, E_min = optimizer_2(Thetas, Energies)
-
-    return theta_min, E_min
-
 def pool_parallel(WF, H, pool_data, E_prev):
     '''
     Parallelizes energy estimations over the pool
@@ -485,7 +325,7 @@ def measurement_parallel_opt(WF, H, d):
     
     return thetas, energies
 
-def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_threshold for chemical accuracy
+def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1e-5):  # adapt_threshold for chemical accuracy
     '''
     Constructs ansatz iteratively using Rotoselect algorithm
     No parameter optimization after selection
@@ -513,7 +353,7 @@ def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_thresh
 
     converged = False
 
-    while converged == False and WF.ups_layout.n_params <= 50:
+    while converged == False and WF.ups_layout.n_params <= 100:
 
         # Load new operator in the ansatz and initialize
         WF.ups_layout.n_params += 1
@@ -527,9 +367,7 @@ def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_thresh
 
         # Looping through pool operator -> get the best ansatz
         for i in range(len(excitation_pool)):
-            # results.append(pool_evaluator(WF, i, pool_data, E_prev_adapt))
-            results.append(pool_evaluator_2(WF, i, pool_data, E_prev_adapt))
-
+            results.append(pool_evaluator(WF, i, pool_data, E_prev_adapt))
 
         # results = pool_parallel(WF, H, pool_data, E_prev_adapt)
         theta_pool, energy_pool = zip(*results)
@@ -538,11 +376,12 @@ def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_thresh
 
         print('OPERATOR->', op_index)
         print(f'Theta {theta_pool[op_index]} - Energy {energy_pool[op_index]} - previous {E_prev_adapt}')
-
+    
         # deltaE_adapt = np.abs(energy_pool[op_index]-E_prev_adapt) # with respect to previous layer
         deltaE_adapt = np.abs(cas_en-energy_pool[op_index]) # for chemical accuracy threshold
 
-        if deltaE_adapt < adapt_threshold:
+
+        if deltaE_adapt < adapt_threshold or WF.ups_layout.n_params >= 100:
             # Updating last layer with data from best operator
             WF.ups_layout.excitation_indices[-1] = excitation_pool[op_index]
             WF.ups_layout.excitation_operator_type[-1] = excitation_pool_type[op_index]
@@ -580,7 +419,7 @@ def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_thresh
 
     return WF, en_traj, rdm1_traj, rdm2_traj
 
-def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_threshold for chemical accuracy
+def rotoselect_opt(WF, pool_data, cas_en, po, oo, adapt_threshold = 1e-5):  # adapt_threshold for chemical accuracy
     '''
     Constructs ansatz iteratively using Rotoselect algorithm
     Full VQE optimization after selection
@@ -590,6 +429,8 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
         pool_data: dictionary with the data about the operator pool
         cas_en: CASSCF reference energy (used to estimate chemical accuracy)
         adapt_threshold: min energy reduction upon addition of new layer (optional, default is chemical accuracy)
+        po: optimize parameters of the unitary (boolean)
+        oo: orbital optimization (boolean)
 
     Returns
         WF: final wave function object from SlowQuant
@@ -608,7 +449,7 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
 
     converged = False
 
-    while converged == False and WF.ups_layout.n_params <= 200:
+    while converged == False and WF.ups_layout.n_params <= 100:
 
         # Load new operator slot in the ansatz
         WF.ups_layout.n_params += 1
@@ -621,8 +462,7 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
         results = []
 
         for i in range(len(excitation_pool)):
-            # results.append(pool_evaluator(WF, i, pool_data, E_prev_adapt))
-            results.append(pool_evaluator_2(WF, i, pool_data, E_prev_adapt))
+            results.append(pool_evaluator(WF, i, pool_data, E_prev_adapt))
 
         for i, el in enumerate(results):
             print(f'OP{i}: The results on the pool are {el}')
@@ -637,7 +477,7 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
         # deltaE_adapt = np.abs(energy_pool[op_index]-E_prev_adapt)  # with respect to previous layer
         deltaE_adapt = np.abs(cas_en-energy_pool[op_index])  # for chemical accuracy
 
-        if deltaE_adapt < adapt_threshold:  
+        if deltaE_adapt < adapt_threshold or WF.ups_layout.n_params >= 100:  
             # Updating last layer with data from best operator
             WF.ups_layout.excitation_indices[-1] = excitation_pool[op_index]
             WF.ups_layout.excitation_operator_type[-1] = excitation_pool_type[op_index]
@@ -665,7 +505,15 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
             WF.thetas = thetas
 
             # Running an optimization
-            WF.run_wf_optimization_1step("slsqp", orbital_optimization=False)
+            if po == True and oo == True:
+                WF.run_wf_optimization_1step("slsqp", orbital_optimization=True)
+
+            if po == True and oo == False:
+                WF.run_wf_optimization_1step("slsqp", orbital_optimization=False)
+
+            if po == False and oo == True:
+                WF.run_orbital_optimization()
+
             # WF = rotosolve(WF)
             
             # Appending energy to trajectory and updating 'previous' energy for next iteration
@@ -673,7 +521,7 @@ def rotoselect_opt(WF, pool_data, cas_en, adapt_threshold = 1.6e-3):  # adapt_th
             deltaE_adapt = np.abs(cas_en-en_traj[-1])            
 
             # Checking convergence to chemical accuracy
-            if deltaE_adapt < adapt_threshold:
+            if deltaE_adapt < adapt_threshold or WF.ups_layout.n_params >= 100:
                 rdm1_traj.append(WF.rdm1)
                 rdm2_traj.append(WF.rdm2)
                 converged = True

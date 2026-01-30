@@ -33,8 +33,9 @@ parser = argparse.ArgumentParser(description="rodoadapt script - returns energy 
 # Add arguments
 parser.add_argument("--mol", type=str, required = True, help="Molecule (H2O, LiH)")
 parser.add_argument("--AS", type=int, nargs=2, required = True, help="Active space nEL nMO")
-parser.add_argument("--gen", type=bool, default = False, help="Generalized excitation operators")
-parser.add_argument("--full_opt", type=bool, default = False, help="full VQE optimization")
+parser.add_argument("--gen", action="store_true", help="Generalized excitation operators")
+parser.add_argument("--po", action="store_true", help="unitary parameter optimization")
+parser.add_argument("--oo", action="store_true", help="orbital optimization")
 
 # Parse arguments
 args = parser.parse_args()
@@ -42,7 +43,8 @@ args = parser.parse_args()
 molecule = args.mol  # molecule specifics via string
 AS = args.AS  # active space (nEL, nMO)
 gen = args.gen
-full_opt = args.full_opt
+po = args.po
+oo = args.oo
 
 # Getting path to current and parent folder
 parent_folder = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
@@ -55,8 +57,13 @@ if molecule == 'H2O':
     # geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA) 
 
 if molecule == 'LiH':
-    # geometry = 'H 0.000000 0.000000 0.000000; Li 1.595000 0.00000 0.000000' #LiH equilibrium
-    geometry = 'H 0.000000 0.000000 0.000000; Li 3.0000 0.00000 0.000000' #LiH stretched
+    geometry = 'H 0.000000 0.000000 0.000000; Li 1.595000 0.00000 0.000000' #LiH equilibrium
+    # geometry = 'H 0.000000 0.000000 0.000000; Li 3.0000 0.00000 0.000000' #LiH stretched
+
+if molecule == 'BeH2':
+    geometry = 'Be 0.000000 0.000000 0.000000; H 1.33376 0.000000 0.000000; H -1.33376 0.000000 0.000000' #BeH2 equilibrium
+    # geometry = 'Be 0.000000 0.000000 0.000000; H 1.33376 0.000000 0.000000; H -1.33376 0.000000 0.000000' #BeH2 triangular
+
 
 if molecule == 'N2':
     # geometry = 'N 0.000000 0.000000 0.000000; N 1.0980 0.00000 0.000000' #N2 equilibrium
@@ -65,36 +72,36 @@ if molecule == 'N2':
 if molecule == 'H6': # stretched H6
     geometry = "H -7.500000 0.000000 0.000000; H -4.500000 0.000000 0.000000; H -1.500000 0.000000 0.000000; H 1.500000 0.000000 0.000000; H 4.500000 0.000000 0.000000; H 7.500000 0.000000 0.000000"
 
-## BeH2 INSERTION PROBLEM
-if 'BeH2' in molecule:
+# # BeH2 INSERTION PROBLEM
+# if 'BeH2' in molecule:
 
-    def Be_ins_coords(x_Be):
-        '''
-        Generates coordinates for BeH2 insertion
-        Be moving along x, H2 moving along z according to:
-        z_H = -0.46*x_Be+2.54
+#     def Be_ins_coords(x_Be):
+#         '''
+#         Generates coordinates for BeH2 insertion
+#         Be moving along x, H2 moving along z according to:
+#         z_H = -0.46*x_Be+2.54
         
-        Arguments
-            x_Be: x coordinate of the Be atom
+#         Arguments
+#             x_Be: x coordinate of the Be atom
         
-        Returns
-            Be_xyz+H2_xyz: string with xyz coordinates of BeH2
-        '''
-        if x_Be <= 4:
-            z_H = -0.46*x_Be+2.54
-        else:
-            z_H = 0.7
+#         Returns
+#             Be_xyz+H2_xyz: string with xyz coordinates of BeH2
+#         '''
+#         if x_Be <= 4:
+#             z_H = -0.46*x_Be+2.54
+#         else:
+#             z_H = 0.7
         
-        # Converting into Angstroms
-        x_Be *= 0.529177
-        z_H *= 0.529177
+#         # Converting into Angstroms
+#         x_Be *= 0.529177
+#         z_H *= 0.529177
 
-        Be_xyz = f'Be {x_Be:.6f} 0.000000 0.000000; '
-        H2_xyz = f'H 0.000000 0.000000 {np.abs(z_H):.6f}; H 0.000000 0.000000 -{np.abs(z_H):.6f}'
+#         Be_xyz = f'Be {x_Be:.6f} 0.000000 0.000000; '
+#         H2_xyz = f'H 0.000000 0.000000 {np.abs(z_H):.6f}; H 0.000000 0.000000 -{np.abs(z_H):.6f}'
 
-        return Be_xyz+H2_xyz
+#         return Be_xyz+H2_xyz
 
-    geometry = Be_ins_coords(float(molecule.split('-')[1].strip()))
+#     geometry = Be_ins_coords(float(molecule.split('-')[1].strip()))
 
 mol_obj = gto.Mole()
 mol_obj.build(atom = geometry, basis = 'sto-3g', symmetry='c2v')
@@ -155,16 +162,23 @@ NHam_qubit = len(mapper.map(FermionicOp(Hamiltonian.get_qiskit_form(WF.num_orbs)
 
 ## DEFINE EXCITATION POOL -> dictionary with data
 
-pool_data = rotoadapt_utils.pool(WF, so_ir, gen)
+if oo == True:
+    pool_data = rotoadapt_utils.pool_D(WF, so_ir, gen)
+    print('D pool')
+
+if oo == False:
+    pool_data = rotoadapt_utils.pool_SD(WF, so_ir, gen)
+    print('SD pool')
+
 
 ## CALCULATE ROTOADAPT
 
 # Add Rotomeasurements
 
-if full_opt == True:
-    WF, en_traj, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect_opt(WF, pool_data, cas_en)    # rotoselect + full VQE optimzation
+if po == True or oo == True:
+    WF, en_traj, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect_opt(WF, pool_data, cas_en, po, oo)    # rotoselect + full VQE optimzation
 
-if full_opt == False:
+if po == False and oo == False:
     WF, en_traj, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect(WF, pool_data, cas_en)  # rotoselect - no optimization
 
 # Count number of measurements (#layers * 4 * #op_pool * #Pauli_strings_H) + VQE cost
@@ -196,16 +210,70 @@ output = {'molecule': molecule,
                           },
           }
 
-if full_opt == True:
+if gen == True:
 
-    if gen == False:
-        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RS_OPT.pkl'), 'wb') as f:
+    if po == True and oo == False:
+
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-RS-full-gen.pkl'), 'wb') as f:
             pickle.dump(output, f)
 
-    if gen == True:
-        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-stretch-RS_OPT-gen.pkl'), 'wb') as f:
+        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RS-full-gen.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)
+
+    elif po == False and oo == False:
+
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-RS-gen.pkl'), 'wb') as f:
             pickle.dump(output, f)
 
-if full_opt == False:
-    with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RS.pkl'), 'wb') as f:
-        pickle.dump(output, f)
+        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RS-gen.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)
+
+    elif po == False and oo == True:
+
+        with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-RS-gen.pkl'), 'wb') as f:
+            pickle.dump(output, f)
+
+        # with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-str-RS-gen.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)
+
+    elif po == True and oo == True:
+
+        with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-RS-full-gen.pkl'), 'wb') as f:
+            pickle.dump(output, f)
+
+        # with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-str-RS-full-gen.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)
+
+else:
+
+    if po == True and oo == False:
+
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-RS-full.pkl'), 'wb') as f:
+            pickle.dump(output, f)
+
+        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RS-full.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)
+
+    elif po == False and oo == False:
+
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-RS.pkl'), 'wb') as f:
+            pickle.dump(output, f)
+
+        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RS.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)
+
+    elif po == False and oo == True:
+
+        with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-RS.pkl'), 'wb') as f:
+            pickle.dump(output, f)
+
+        # with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-str-RS.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)
+
+    elif po == True and oo == True:
+
+        with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-RS-full.pkl'), 'wb') as f:
+            pickle.dump(output, f)
+
+        # with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-str-RS-full.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)

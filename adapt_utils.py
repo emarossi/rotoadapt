@@ -8,9 +8,9 @@ from slowquant.unitary_coupled_cluster.operator_state_algebra import expectation
 from slowquant.unitary_coupled_cluster.util import iterate_t1, iterate_t2, iterate_t1_generalized, iterate_t2_generalized
 from slowquant.unitary_coupled_cluster.operators import G1, G2
 
-def pool(WF, so_ir, generalized):
+def pool_SD(WF, so_ir, generalized):
     '''
-    Defines the excitation pool and implements symmetry filter.
+    Defines the excitation pool.
 
     Arguments
         WF: SlowQuant wave function object
@@ -48,6 +48,43 @@ def pool(WF, so_ir, generalized):
             pool_data["excitation indeces"].append((i, a))            
             pool_data["excitation type"].append("single")
             pool_data["excitation operator"].append(G1(i, a, True))
+
+        ## Generate indeces for doubly-excited operators
+        for a, i, b, j in iterate_t2(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
+            pool_data["excitation indeces"].append((i, j, a, b))
+            pool_data["excitation type"].append("double")
+            pool_data["excitation operator"].append(G2(i, j, a, b, True))
+
+    return pool_data
+
+def pool_D(WF, so_ir, generalized):
+    '''
+    Defines the excitation pool.
+
+    Arguments
+        WF: SlowQuant wave function object
+        so_ir: list of irreducible representation labels for each spin orbital
+        generalized: generalized pool or not?->Bool
+
+    Returns
+        pool_data: pool data with symmetry allowed excitations
+    '''
+    pool_data = {
+    "excitation indeces": [],
+    "excitation type": [],
+    "excitation operator": []
+    }
+
+    ## GENERALIZED vs P-H excitation pool -> first layer always P-H since HF is always reference
+    if generalized == True:
+
+        ## Generate indeces for doubly-excited operators
+        for a, i, b, j in iterate_t2_generalized(WF.num_spin_orbs):
+            pool_data["excitation indeces"].append((i, j, a, b))
+            pool_data["excitation type"].append("double")
+            pool_data["excitation operator"].append(G2(i, j, a, b, True))
+
+    else:
 
         ## Generate indeces for doubly-excited operators
         for a, i, b, j in iterate_t2(WF.active_occ_spin_idx, WF.active_unocc_spin_idx):
