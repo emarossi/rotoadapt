@@ -12,7 +12,7 @@ from slowquant.unitary_coupled_cluster.util import iterate_t1_generalized, itera
 
 # Operators
 from slowquant.unitary_coupled_cluster.operators import G1, G2
-from slowquant.unitary_coupled_cluster.operators import hamiltonian_0i_0a
+from slowquant.unitary_coupled_cluster.operators import hamiltonian_0i_0a, hamiltonian_full_space
 from slowquant.unitary_coupled_cluster.operator_state_algebra import propagate_state, expectation_value, construct_ups_state
 
 # Wave function ansatz - unitary product state
@@ -31,11 +31,12 @@ import rotoadapt_utils
 parser = argparse.ArgumentParser(description="rodoadapt script - returns energy opt trajectory, WF object, #measurements")
 
 # Add arguments
-parser.add_argument("--mol", type=str, required = True, help="Molecule (H2O, LiH)")
+parser.add_argument("--mol", type=str, required = True, help="Molecule (H2O, LiH, BeH2, H6)")
 parser.add_argument("--AS", type=int, nargs=2, required = True, help="Active space nEL nMO")
 parser.add_argument("--gen", action="store_true", help="Generalized excitation operators")
 parser.add_argument("--po", action="store_true", help="unitary parameter optimization")
 parser.add_argument("--oo", action="store_true", help="orbital optimization")
+parser.add_argument("--eff", action="store_true", help="Rotoselect efficient")
 
 # Parse arguments
 args = parser.parse_args()
@@ -45,6 +46,7 @@ AS = args.AS  # active space (nEL, nMO)
 gen = args.gen
 po = args.po
 oo = args.oo
+eff = args.eff
 
 # Getting path to current and parent folder
 parent_folder = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
@@ -147,12 +149,20 @@ WF = WaveFunctionUPS(
     )
 
 #Energy Hamiltonian Fermionic operator
-Hamiltonian = hamiltonian_0i_0a(
+if eff == True:
+    Hamiltonian = hamiltonian_full_space(
+        WF.h_mo, 
+        WF.g_mo, 
+        WF.num_orbs
+    )
+else:
+    Hamiltonian = hamiltonian_0i_0a(
     WF.h_mo,
     WF.g_mo,
     WF.num_inactive_orbs,
     WF.num_active_orbs,
 )
+
 
 #define mapper
 mapper = JordanWignerMapper()
@@ -163,11 +173,11 @@ NHam_qubit = len(mapper.map(FermionicOp(Hamiltonian.get_qiskit_form(WF.num_orbs)
 ## DEFINE EXCITATION POOL -> dictionary with data
 
 if oo == True:
-    pool_data = rotoadapt_utils.pool_D(WF, so_ir, gen)
+    pool_data = rotoadapt_utils.pool_D(WF, so_ir, gen, eff)
     print('D pool')
 
 if oo == False:
-    pool_data = rotoadapt_utils.pool_SD(WF, so_ir, gen)
+    pool_data = rotoadapt_utils.pool_SD(WF, so_ir, gen, eff)
     print('SD pool')
 
 
@@ -175,14 +185,21 @@ if oo == False:
 
 # Add Rotomeasurements
 
-if po == True or oo == True:
+if (po == True or oo == True) and eff == False:
     WF, en_traj, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect_opt(WF, pool_data, cas_en, po, oo)    # rotoselect + full VQE optimzation
+    
+    # Count number of measurements (#layers * 4 * #op_pool * #Pauli_strings_H) + VQE cost
+    cost_pool = int((WF.ups_layout.n_params)*4*len(pool_data['excitation indeces'])*NHam_qubit)
 
-if po == False and oo == False:
+if po == False and oo == False and eff == False:
     WF, en_traj, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect(WF, pool_data, cas_en)  # rotoselect - no optimization
 
-# Count number of measurements (#layers * 4 * #op_pool * #Pauli_strings_H) + VQE cost
-cost_pool = int((WF.ups_layout.n_params)*4*len(pool_data['excitation indeces'])*NHam_qubit)
+if po == True and oo == False and eff == True:
+    WF, en_traj, cost_pool, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect_efficient_opt(WF, pool_data, cas_en, po, oo)    # rotoselect + full VQE optimzation
+
+if po == False and oo == False and eff == True:
+    WF, en_traj, cost_pool, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect_efficient(WF, pool_data, cas_en, po, oo)    # rotoselect + full VQE optimzation
+
 cost_VQE = int(WF.num_energy_evals*NHam_qubit)
 
 num_en_evals = cost_pool + cost_VQE
@@ -212,7 +229,7 @@ output = {'molecule': molecule,
 
 if gen == True:
 
-    if po == True and oo == False:
+    if po == True and oo == False and eff == False:
 
         with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-RS-full-gen.pkl'), 'wb') as f:
             pickle.dump(output, f)
@@ -220,7 +237,7 @@ if gen == True:
         # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RS-full-gen.pkl'), 'wb') as f:
         #     pickle.dump(output, f)
 
-    elif po == False and oo == False:
+    elif po == False and oo == False and eff == False:
 
         with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-RS-gen.pkl'), 'wb') as f:
             pickle.dump(output, f)
@@ -228,7 +245,7 @@ if gen == True:
         # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RS-gen.pkl'), 'wb') as f:
         #     pickle.dump(output, f)
 
-    elif po == False and oo == True:
+    elif po == False and oo == True and eff == False:
 
         with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-RS-gen.pkl'), 'wb') as f:
             pickle.dump(output, f)
@@ -236,13 +253,23 @@ if gen == True:
         # with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-str-RS-gen.pkl'), 'wb') as f:
         #     pickle.dump(output, f)
 
-    elif po == True and oo == True:
+    elif po == True and oo == True and eff == False:
 
         with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-RS-full-gen.pkl'), 'wb') as f:
             pickle.dump(output, f)
 
         # with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-str-RS-full-gen.pkl'), 'wb') as f:
         #     pickle.dump(output, f)
+
+    elif po == True and oo == False and eff == True:
+
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-RS-eff-full-gen.pkl'), 'wb') as f:
+            pickle.dump(output, f)
+
+    elif po == False and oo == False and eff == True:
+
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-RS-eff-gen.pkl'), 'wb') as f:
+            pickle.dump(output, f)
 
 else:
 

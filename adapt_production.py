@@ -188,6 +188,16 @@ def do_adapt(WF, maxiter, epoch=1e-6):
     # ADAPT ANSATZ + VQE
     for j in range(maxiter):
 
+        if oo == True:
+            print('Orbital optimization - rebuilding the H...')
+
+            Hamiltonian = hamiltonian_0i_0a(
+                WF.h_mo,
+                WF.g_mo,
+                WF.num_inactive_orbs,
+                WF.num_active_orbs,
+            )
+
         #Apply operator to state -> obtain new state (list of operators, state, info on CI space, active space params)
         H_ket = propagate_state([Hamiltonian], WF.ci_coeffs, WF.ci_info, WF.thetas, WF.ups_layout)
 
@@ -264,7 +274,7 @@ def do_adapt(WF, maxiter, epoch=1e-6):
         deltaE_adapt = np.abs(cas_en-WF.energy_elec)
         rdm1_traj.append(WF.rdm1)
 
-        if deltaE_adapt < epoch or WF.ups_layout.n_params >= 10:
+        if deltaE_adapt < epoch or WF.ups_layout.n_params >= 100:
             en_traj.append(WF.energy_elec)
             # Final printout
             print('----------------------')

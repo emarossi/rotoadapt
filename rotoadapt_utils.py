@@ -8,7 +8,19 @@ from slowquant.unitary_coupled_cluster.operator_state_algebra import expectation
 from slowquant.unitary_coupled_cluster.util import iterate_t1, iterate_t2, iterate_t1_generalized, iterate_t2_generalized
 from slowquant.unitary_coupled_cluster.operators import G1, G2
 
-def pool_SD(WF, so_ir, generalized):
+# Modules for Hamiltonian construction
+from slowquant.molecularintegrals.integralfunctions import one_electron_integral_transform, two_electron_integral_transform
+from slowquant.unitary_coupled_cluster.fermionic_operator import FermionicOperator
+from slowquant.unitary_coupled_cluster.operators import commutator
+from slowquant.unitary_coupled_cluster.operators import hamiltonian_full_space
+
+# Qiskit utils to get number of measurements
+from qiskit_nature.second_q.operators import FermionicOp
+from qiskit_nature.second_q.mappers import JordanWignerMapper
+
+## POOL DEFINITION
+
+def pool_SD(WF, so_ir, generalized, efficient):
     '''
     Defines the excitation pool.
 
@@ -23,7 +35,10 @@ def pool_SD(WF, so_ir, generalized):
     pool_data = {
     "excitation indeces": [],
     "excitation type": [],
-    "excitation operator": []
+    "excitation operator": [],
+    "H fragments": [],
+    "N_Paulis_H1": [],
+    "N_Paulis_H4": [],
     }
 
     ## GENERALIZED vs P-H excitation pool -> first layer always P-H since HF is always reference
@@ -55,9 +70,24 @@ def pool_SD(WF, so_ir, generalized):
             pool_data["excitation type"].append("double")
             pool_data["excitation operator"].append(G2(i, j, a, b, True))
 
+    if efficient == True:
+
+        print('SPLITTING HAMILTONIAN....')
+
+        #define mapper
+        mapper = JordanWignerMapper()
+
+        for A in pool_data["excitation operator"]:
+            
+            H1, H4 = H_split(WF.num_orbs, WF.h_mo, WF.g_mo, A)
+
+            pool_data["N_Paulis_H1"].append(len(mapper.map(FermionicOp(H1.get_qiskit_form(WF.num_orbs), WF.num_spin_orbs)).paulis))
+            pool_data["N_Paulis_H4"].append(len(mapper.map(FermionicOp(H4.get_qiskit_form(WF.num_orbs), WF.num_spin_orbs)).paulis))
+            pool_data["H fragments"].append((H1, H4))
+
     return pool_data
 
-def pool_D(WF, so_ir, generalized):
+def pool_D(WF, so_ir, generalized, efficient):
     '''
     Defines the excitation pool.
 
@@ -72,7 +102,10 @@ def pool_D(WF, so_ir, generalized):
     pool_data = {
     "excitation indeces": [],
     "excitation type": [],
-    "excitation operator": []
+    "excitation operator": [],
+    "H fragments": [],
+    "N_Paulis_H1": [],
+    "N_Paulis_H4": [],
     }
 
     ## GENERALIZED vs P-H excitation pool -> first layer always P-H since HF is always reference
@@ -92,7 +125,22 @@ def pool_D(WF, so_ir, generalized):
             pool_data["excitation type"].append("double")
             pool_data["excitation operator"].append(G2(i, j, a, b, True))
 
+    if efficient == True:
+
+        #define mapper
+        mapper = JordanWignerMapper()
+
+        for A in pool_data["excitation operator"]:
+            
+            H1, H4 = H_split(WF.num_orbs, WF.h_mo, WF.g_mo, A)
+
+            pool_data["N_Paulis_H1"].append(len(mapper.map(FermionicOp(H1.get_qiskit_form(WF.num_orbs), WF.num_spin_orbs)).paulis))
+            pool_data["N_Paulis_H4"].append(len(mapper.map(FermionicOp(H4.get_qiskit_form(WF.num_orbs), WF.num_spin_orbs)).paulis))
+            pool_data["H fragments"].append((H1, H4))
+
     return pool_data
+
+## ROTOSELECT 5 SHOTS
 
 def energy_landscape(A, B, C, D, E, theta):
     '''
@@ -264,28 +312,6 @@ def pool_evaluator(WF, pool_index, pool_data, E_prev):
 
     return theta_min, E_min
 
-def pool_parallel(WF, H, pool_data, E_prev):
-    '''
-    Parallelizes energy estimations over the pool
-
-    Arguments
-        WF: WF object from SlowQuant from previous iteration
-        H: hamiltonian
-        pool_data: dictionary with info on pool operators
-
-    Returns
-        results: list of (theta_min, E_min) for each pool operator   
-    '''
-    excitation_pool = pool_data["excitation indeces"]
-    pool_idx_array = np.arange(len(excitation_pool))
-
-    # mp.set_start_method("spawn", force=True)
-
-    with mp.Pool(processes=os.cpu_count()) as pool:
-        results = pool.starmap(pool_evaluator, [(WF, pool_index, H, pool_data, E_prev) for pool_index in pool_idx_array])
-
-    return results
-
 def measure_energy_theta(WF, H, thetas_list):
     '''
     Updates WF with new thetas + measures energy
@@ -302,28 +328,6 @@ def measure_energy_theta(WF, H, thetas_list):
     energy = float(expectation_value(WF.ci_coeffs, [H], WF.ci_coeffs, WF.ci_info, WF.thetas, WF.ups_layout))
 
     return energy
-
-def measurement_parallel_opt(WF, H, d):
-    '''
-    Parallelizes energy measurements for global minimum search
-
-    Arguments
-        WF: WF object from SlowQuant from previous iteration
-        H: hamiltonian
-        d: index of theta being optimized
-
-    Returns
-        thetas: list of thetas to construct companion matrix
-        energies: list of energies for system in companion matrix method
-    '''
-    current_thetas = WF.thetas
-    thetas_scan = [current_thetas[:d] + [current_thetas[d] + (2*np.pi*l)/5.5] + current_thetas[d+1:] for l in range(1,5)]
-    thetas = [current_thetas[d] + (2*np.pi*l)/5.5 for l in range(1,5)]
-
-    with mp.Pool(processes=os.cpu_count()) as pool:
-            energies = pool.starmap(measure_energy_theta, [(WF, H, thetas_scan[i]) for i in range(0, len(thetas_scan))])
-    
-    return thetas, energies
 
 def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1e-5):  # adapt_threshold for chemical accuracy
     '''
@@ -540,6 +544,632 @@ def rotoselect_opt(WF, pool_data, cas_en, po, oo, adapt_threshold = 1e-5):  # ad
                 E_prev_adapt = en_traj[-1]
 
     return WF, en_traj, rdm1_traj, rdm2_traj
+
+
+## ROTOSELECT EFFICIENT
+
+# Construct H operator and split it into H1 and H4
+
+def a_op(spinless_idx: int, spin: str, dagger: bool) -> FermionicOperator:
+    """Construct annihilation/creation operator.
+
+    Args:
+        spinless_idx: Spatial orbital index.
+        spin: Alpha or beta spin.
+        dagger: If creation operator.
+
+    Returns:
+        Annihilation/creation operator.
+    """
+    if spin not in ("alpha", "beta"):
+        raise ValueError(f'spin must be "alpha" or "beta" got {spin}')
+    idx = 2 * spinless_idx
+    if spin == "beta":
+        idx += 1
+    return FermionicOperator({((idx, dagger),): 1})
+
+def Epq_s(p: int, q: int) -> FermionicOperator:
+    r"""Construct Fermi strings for one-electron excitation operator.
+
+    .. math::
+        \hat{O}_{n} = \hat{a}^\dagger_{p,\sigma}\hat{a}_{q,\tau}
+
+    Args:
+        p: Spatial orbital index.
+        q: Spatial orbital index.
+
+    Returns:
+        O1, O2: Two one-electron Fermi strings for all excitations between spin-orbitals
+    """
+    O1 = a_op(p, "alpha", dagger=True) * a_op(q, "alpha", dagger=False)
+    O2 = a_op(p, "beta", dagger=True) * a_op(q, "beta", dagger=False)
+
+    return O1, O2
+
+def Epqrs_s(p: int, q: int, r: int, s: int) -> FermionicOperator:
+    r"""
+    Construct Fermi strings for two-electron excitation operator -> 2.2.15 pink bible
+
+    .. math::
+        \hat{O}_{n} = hat{a}^\dagger_{p,\sigma}\hat{a}_{r,\tau}\hat{a}_{s,\tau}\hat{a}_{q,\tau}
+
+    Args:
+        p: Spatial orbital index.
+        q: Spatial orbital index.
+        r: Spatial orbital index.
+        s: Spatial orbital index.
+
+    Returns:
+        O1, O2, O3, O4: Four two-electron Fermi strings for all excitations between spin-orbitals.
+    """
+    O1 = (a_op(p, "alpha", dagger=True) 
+          * a_op(r, "alpha", dagger=True) 
+          * a_op(s, "alpha", dagger=False)
+          * a_op(q, "alpha", dagger=False)
+          ) 
+
+    O2 = (a_op(p, "beta", dagger=True) 
+        * a_op(r, "alpha", dagger=True) 
+        * a_op(s, "alpha", dagger=False)
+        * a_op(q, "beta", dagger=False)
+        )
+                
+    O3 = (a_op(p, "alpha", dagger=True) 
+        * a_op(r, "beta", dagger=True) 
+        * a_op(s, "beta", dagger=False)
+        * a_op(q, "alpha", dagger=False)
+        )
+                
+    O4 = (a_op(p, "beta", dagger=True) 
+        * a_op(r, "beta", dagger=True) 
+        * a_op(s, "beta", dagger=False)
+        * a_op(q, "beta", dagger=False)
+        )
+
+    return O1, O2, O3, O4
+
+def EvaluateSort(O: FermionicOperator, 
+                  A: FermionicOperator, 
+                  H1: FermionicOperator, 
+                  H4: FermionicOperator, 
+                  intgr: float,
+                  num_part: int):
+    '''
+    Divides H into \alpha=1 (H1) and \alpha=4 (H4) cases (PRA 111, 042825 (2025))
+    1. Calculates [O,A] and A[O,A]A
+    2. If A[O,A]A = 0 -> \alpha=1 -> add integr*O to H1
+    3. If A[O,A]A = [O,A] -> \alpha=4 -> add integr*O to H4
+
+    Arguments:
+        - O: Fermi string from H
+        - A: anti-symmetric generator from pool
+        - H1: H1 from previous iterations
+        - H4: H4 from previous iterations
+        - intgr: molecular integral
+        - num_part: 1-particle or 2-particle part of H
+
+    Returns:
+        - H1: H1 with added Fermi string or input H1
+        - H4: H4 with added Fermi string or input H4
+    '''
+    # commutator [O,A]
+    comm = commutator(O, A)
+    cc = comm.operator_count
+    # product commutator A[O,A]A
+    pc = (A*comm*A).operator_count
+
+    print(O.operators_readable, A.operators_readable)
+    print('[O,A]:', commutator(O, A).operators_readable)
+    print('A[O,A]A:', (A*commutator(O, A)*A).operators_readable)
+
+    # 1-particle part of H
+    if num_part == 1:
+
+        if cc == pc == {}:
+            H1 += intgr * O
+            print('alpha = 1')
+
+        if cc == pc != {}:
+            H4 += intgr * O
+            print('alpha = 4')
+
+        if pc != cc:
+            H1 += intgr * O
+            print('alpha = 1')        
+
+    # 2-particle part of H
+    if num_part == 2:
+
+        if cc == pc == {}:
+            H1 += 1/2 * intgr * O
+            print('alpha = 1')
+
+        if cc == pc != {}:
+            H4 += 1/2 * intgr * O
+            print('alpha = 4')
+
+        if pc != cc:
+            H1 += 1/2 * intgr * O
+            print('alpha = 1')
+
+    return H1, H4
+
+def H_split(nMO, h_mo, g_mo, A):
+    '''
+    Splits H into H1 and H4 via evaluated_sort
+    
+    Arguments:
+        - nMO: number of molecular orbitals
+        - h_mo: 1-electron integrals, molecular orbitals basis
+        - g_mo: 2-electron integrals, molecular orbitals basis
+        - A: anti-hermitian generator
+
+    Returns:
+        - H1, H4: \alpha=1 and \alpha=4 Hamiltonians
+    '''
+    H1 = FermionicOperator({})
+    H4 = FermionicOperator({})
+
+    for p in range(nMO):
+        for q in range(nMO):
+            if abs(h_mo[p, q]) < 10**-14:
+                continue
+
+            # Generate 1-electron Fermi strings 
+            O1, O2 = Epq_s(p, q)
+
+            # Split Fermi strings into H1 or H4 
+            H1, H4 = EvaluateSort(O1, A, H1, H4, h_mo[p, q], 1)
+            H1, H4 = EvaluateSort(O2, A, H1, H4, h_mo[p, q], 1)
+
+            print('---------')
+
+    for p in range(nMO):
+        for q in range(nMO):
+            for r in range(nMO):
+                for s in range(nMO):
+                    if abs(g_mo[p, q, r, s]) < 10**-14:
+                        continue
+
+                    # Generate 2-electron Fermi strings 
+                    O1, O2, O3, O4 = Epqrs_s(p, q, r, s)
+                                
+                    # Split Fermi strings into H1 or H4 
+                    H1, H4 = EvaluateSort(O1, A, H1, H4, g_mo[p, q, r, s], 2)
+                    H1, H4 = EvaluateSort(O2, A, H1, H4, g_mo[p, q, r, s], 2)
+                    H1, H4 = EvaluateSort(O3, A, H1, H4, g_mo[p, q, r, s], 2)
+                    H1, H4 = EvaluateSort(O4, A, H1, H4, g_mo[p, q, r, s], 2)
+
+    return H1, H4
+
+def landscape1(A, B, C, theta):
+    '''
+    Energy landscape for \alpha = 1 case --> eq. 12 in PRA 111, 042825 (2025)
+    
+    Arguments:
+        A, B, C: landscape coefficients
+        theta: parameter of analytic landscape
+
+    Returns:
+        Analytic landscape function
+    '''
+    return A + B*np.sin(theta) + C*(1-np.cos(theta))
+
+def landscape4(A, B, C, theta):
+    '''
+    Energy landscape for \alpha = 4 case --> eq. 13 in PRA 111, 042825 (2025)
+    
+    Arguments:
+        A, B, C: landscape coefficients
+        theta: parameter of analytic landscape
+
+    Returns:
+        Analytic landscape function
+    '''
+    return A + 1/2*B*np.sin(2*theta) + 1/2*C*np.sin(theta)**2
+
+def landscape_tot(A1, B1, C1, A4, B4, C4, theta):
+    '''
+    Total energy landscape summing landscape1 and landscape4
+    
+    Arguments:
+        A1, B1, C1: landscape1 coefficients
+        A4, B4, C4: landscape4 coefficients
+        theta: parameter of analytic landscape (common between landscape1 and landscape4)
+
+    Returns:
+        Total analytic landscape function
+    '''
+    return A1 + B1*np.sin(theta) + C1*(1-np.cos(theta)) + A4 + 1/2*B4*np.sin(2*theta) + 1/2*C4*np.sin(theta)**2
+
+# Polynomial corresponding to the derivative -> find zeros = find min-max
+
+def poly_min(B1, C1, B4, C4):
+    '''
+    Calculates coefficients of polynomial
+        P4*x^4 + P3*x^3 + P2*x^2 +P1*x + P0
+    corresponding to derivative of landscape_tot
+    Obtained via substitutions: sin(\theta) = 2x/1+x^2 and cos(\theta) = 1-x^2/1+x^2
+    
+    Arguments:
+        B1, C1, B4, C4: cofficients of landscape1 and lanscape4
+
+    Returns:
+        P4, P3, P2, P1, P0: coefficients of derivative polynomial
+    
+    '''
+    P4 = B4 - B1
+    P3 = 2*C1 - 2*C4
+    P2 = -6*B4
+    P1 = 2*C1 + 2*C4
+    P0 = B1 + B4
+
+    return [P4, P3, P2, P1, P0]
+
+def rotoselect_efficient_opt(WF, pool_data, cas_en, po, oo, adapt_threshold = 1e-5):  # adapt_threshold for chemical accuracy
+
+    # Defining the excitation pool
+    excitation_pool = pool_data["excitation indeces"]
+    excitation_pool_type = pool_data["excitation type"]
+
+    # Initialize previous energy and energy trajectory (here with HF energy)
+    E_prev_adapt = float(WF.energy_elec)
+    en_traj = [E_prev_adapt]
+    rdm1_traj = [WF.rdm1]
+    rdm2_traj = [WF.rdm2]
+
+    # Initialize thetas sample
+    thetas_samples = np.array([0, np.pi/3, 3*np.pi/2])
+
+    converged = False
+
+    # Initialize the number of measurements over the pool
+    N_Paulis_pool = 0
+
+    while converged == False and WF.ups_layout.n_params <= 100:
+
+        # Load new operator slot in the ansatz
+        WF.ups_layout.n_params += 1
+        WF.ups_layout.excitation_indices.append((0,0))
+        WF.ups_layout.excitation_operator_type.append(" ")
+        WF.ups_layout.grad_param_R[f"p{WF.ups_layout.n_params:09d}"] = 2
+        WF.ups_layout.param_names.append(f"p{WF.ups_layout.n_params:09d}")
+        WF._thetas.append(0.0)
+
+        energy_pool = []
+        theta_pool = []
+
+        for i in range(len(excitation_pool)):
+            
+            H1, H4 = pool_data["H fragments"][i]
+            N_Paulis_H1 = pool_data["N_Paulis_H1"][i]
+            N_Paulis_H4 = pool_data["N_Paulis_H4"][i]
+
+            E1 = []
+            E4 = []
+
+            WF.ups_layout.excitation_indices[-1] = excitation_pool[i]
+            WF.ups_layout.excitation_operator_type[-1] = excitation_pool_type[i]
+
+            # MEASUREMENT - 2 SHOTS + Small part H (either H1 or H4) - 2 shots if either #Paulis_H1 or #Paulis_H4 = 0
+            for theta in thetas_samples:
+
+                thetas = WF.thetas
+                thetas[-1] = theta
+                WF.thetas = thetas
+
+                # Recycling previous measurement for \theta = 0
+                if theta == 0:
+                    
+                    # H split into H1 and H4 (with #Paulis_H1 !=0 and #Paulis_H4 != 0)
+                    if N_Paulis_H1 < N_Paulis_H4 and N_Paulis_H1 !=0:
+                        E1.append(expectation_value(WF.ci_coeffs, [H1], WF.ci_coeffs, WF.ci_info))
+                        E4.append(E_prev_adapt - E1[0])
+                        N_Paulis_pool += N_Paulis_H1
+
+                    if N_Paulis_H4 < N_Paulis_H1 and N_Paulis_H1 !=0:
+                        E4.append(expectation_value(WF.ci_coeffs, [H4], WF.ci_coeffs, WF.ci_info))
+                        E1.append(E_prev_adapt - E4[0])
+                        N_Paulis_pool += N_Paulis_H4
+
+                    # H equals either H1 or H4
+                    if N_Paulis_H1 == 0:
+                        E4.append(E_prev_adapt)
+
+                    if N_Paulis_H4 == 0:
+                        E1.append(E_prev_adapt)
+                
+                # Measure both H1 and H4 for next two \thetas
+                else:
+                    E1.append(expectation_value(WF.ci_coeffs, [H1], WF.ci_coeffs, WF.ci_info))
+                    N_Paulis_pool += N_Paulis_H1
+                    E4.append(expectation_value(WF.ci_coeffs, [H4], WF.ci_coeffs, WF.ci_info))
+                    N_Paulis_pool += N_Paulis_H4
+
+            ## FIND LANDSCAPE MINIMUM
+
+            # Getting landscape coefficients by solving system of equations
+            X1 = np.column_stack([np.ones_like(thetas_samples),
+                                np.sin(thetas_samples), 
+                                1-np.cos(thetas_samples),
+                                ])
+                    
+            A1, B1, C1 = np.linalg.solve(X1, E1)
+
+            X4 = np.column_stack([np.ones_like(thetas_samples),
+                                1/2*np.sin(2*thetas_samples),
+                                1/2*np.sin(thetas_samples)**2,
+                                ])
+                    
+            A4, B4, C4 = np.linalg.solve(X4, E4)
+
+            # Find thetas for min and max energy points by finding zeros of derivative polynomial
+            pol_coeffs = np.array(poly_min(B1, C1, B4, C4))
+
+            # Run np.roots only when pol_coeffs is not array of zeros (crashes otherwise)
+            if pol_coeffs.all() == 0:
+                theta_min_max = [0]
+
+            else:
+                # Removing complex roots
+                roots = np.roots(pol_coeffs)                
+                theta_min_max = 2*np.arctan(roots[np.isclose(roots.imag, 0)].real)
+
+                if np.any(theta_min_max.imag > 1e-12):
+                    raise ValueError('Complex roots encountered')
+            
+            # Calculate min/max energy of total landscape
+            E_min_max = landscape_tot(A1, B1, C1, A4, B4, C4, theta_min_max)      
+
+            #Get energy minimum and corresponding theta
+            E_min = np.min(E_min_max)
+            theta_min = theta_min_max[np.argmin(E_min_max)]
+
+            # Store energy scores and corresponding theta
+            energy_pool.append(E_min)
+            theta_pool.append(theta_min)
+
+        op_index = np.argmin(energy_pool)
+
+        print('OPERATOR->', op_index)
+        print(f'Theta {theta_pool[op_index]} - Energy {energy_pool[op_index]} - previous {E_prev_adapt}')
+
+        # deltaE_adapt = np.abs(energy_pool[op_index]-E_prev_adapt)  # with respect to previous layer
+        deltaE_adapt = np.abs(cas_en-energy_pool[op_index])  # with respect to full CI
+
+        if deltaE_adapt < adapt_threshold or WF.ups_layout.n_params >= 100:  
+            # Updating last layer with data from best operator
+            WF.ups_layout.excitation_indices[-1] = excitation_pool[op_index]
+            WF.ups_layout.excitation_operator_type[-1] = excitation_pool_type[op_index]
+            thetas = WF.thetas
+            thetas[-1] = theta_pool[op_index]
+            WF.thetas = thetas
+
+            # Appending energy and termination (before full optimization)
+            en_traj.append(float(energy_pool[op_index]))
+            rdm1_traj.append(WF.rdm1)
+            rdm2_traj.append(WF.rdm2)
+            converged = True
+            print('----------------------')
+            print(f'FINAL RESULT - Energy: {en_traj[-1]} - #Layers: {WF.ups_layout.n_params}')
+            print('EXCITATION SEQUENCE')
+            for i, (op_idx, op_type) in enumerate(zip(WF.ups_layout.excitation_indices, WF.ups_layout.excitation_operator_type)):
+                print(f'LAYER {i}: {op_idx} | {op_type}')
+        
+        else:
+            # Updating last layer with data from best operator
+            WF.ups_layout.excitation_indices[-1] = excitation_pool[op_index]
+            WF.ups_layout.excitation_operator_type[-1] = excitation_pool_type[op_index]
+            thetas = WF.thetas
+            thetas[-1] = theta_pool[op_index]
+            WF.thetas = thetas
+
+            # Running an optimization
+            if po == True and oo == True:
+                WF.run_wf_optimization_1step("slsqp", orbital_optimization=True)
+
+            if po == True and oo == False:
+                WF.run_wf_optimization_1step("slsqp", orbital_optimization=False)
+
+            if po == False and oo == True:
+                WF.run_orbital_optimization()
+
+            # WF = rotosolve(WF)
+            
+            # Appending energy to trajectory and updating 'previous' energy for next iteration
+            en_traj.append(WF.energy_elec)
+            deltaE_adapt = np.abs(cas_en-en_traj[-1])            
+
+            # Checking convergence to chemical accuracy
+            if deltaE_adapt < adapt_threshold or WF.ups_layout.n_params >= 100:
+                rdm1_traj.append(WF.rdm1)
+                rdm2_traj.append(WF.rdm2)
+                converged = True
+
+                # Final printout
+                print('----------------------')
+                print(f'FINAL RESULT - Energy: {en_traj[-1]} - #Layers: {WF.ups_layout.n_params}')
+                print('EXCITATION SEQUENCE')
+                for i, (op_idx, op_type) in enumerate(zip(WF.ups_layout.excitation_indices, WF.ups_layout.excitation_operator_type)):
+                    print(f'LAYER {i}: {op_idx} | {op_type}')
+
+            else:
+                rdm1_traj.append(WF.rdm1)
+                rdm2_traj.append(WF.rdm2)
+                print(f'RESULT at layer {WF.ups_layout.n_params} - Energy: {WF.energy_elec} - Previous: {E_prev_adapt} - Delta: {deltaE_adapt} - Theta: {theta_pool[op_index]}')
+                E_prev_adapt = en_traj[-1]
+
+    return WF, en_traj, N_Paulis_pool, rdm1_traj, rdm2_traj
+
+def rotoselect_efficient(WF, pool_data, cas_en, po, oo, adapt_threshold = 1e-5):  # adapt_threshold for chemical accuracy
+
+    # Defining the excitation pool
+    excitation_pool = pool_data["excitation indeces"]
+    excitation_pool_type = pool_data["excitation type"]
+
+    # Initialize previous energy and energy trajectory (here with HF energy)
+    E_prev_adapt = float(WF.energy_elec)
+    en_traj = [E_prev_adapt]
+    rdm1_traj = [WF.rdm1]
+    rdm2_traj = [WF.rdm2]
+
+    # Initialize thetas sample
+    thetas_samples = np.array([0, np.pi/3, 3*np.pi/2])
+
+    converged = False
+
+    # Initialize the number of measurements over the pool
+    N_Paulis_pool = 0
+
+    while converged == False and WF.ups_layout.n_params <= 100:
+
+        # Load new operator slot in the ansatz
+        WF.ups_layout.n_params += 1
+        WF.ups_layout.excitation_indices.append((0,0))
+        WF.ups_layout.excitation_operator_type.append(" ")
+        WF.ups_layout.grad_param_R[f"p{WF.ups_layout.n_params:09d}"] = 2
+        WF.ups_layout.param_names.append(f"p{WF.ups_layout.n_params:09d}")
+        WF._thetas.append(0.0)
+
+        energy_pool = []
+        theta_pool = []
+
+        for i in range(len(excitation_pool)):
+            
+            H1, H4 = pool_data["H fragments"][i]
+            N_Paulis_H1 = pool_data["N_Paulis_H1"][i]
+            N_Paulis_H4 = pool_data["N_Paulis_H4"][i]
+
+            E1 = []
+            E4 = []
+
+            WF.ups_layout.excitation_indices[-1] = excitation_pool[i]
+            WF.ups_layout.excitation_operator_type[-1] = excitation_pool_type[i]
+
+            # MEASUREMENT - 2 SHOTS + Small part H (either H1 or H4) - 2 shots if either #Paulis_H1 or #Paulis_H4 = 0
+            for theta in thetas_samples:
+
+                thetas = WF.thetas
+                thetas[-1] = theta
+                WF.thetas = thetas
+
+                # Recycling previous measurement for \theta = 0
+                if theta == 0:
+                    
+                    # H split into H1 and H4 (with #Paulis_H1 !=0 and #Paulis_H4 != 0)
+                    if N_Paulis_H1 < N_Paulis_H4 and N_Paulis_H1 !=0:
+                        E1.append(expectation_value(WF.ci_coeffs, [H1], WF.ci_coeffs, WF.ci_info))
+                        E4.append(E_prev_adapt - E1[0])
+                        N_Paulis_pool += N_Paulis_H1
+
+                    if N_Paulis_H4 < N_Paulis_H1 and N_Paulis_H1 !=0:
+                        E4.append(expectation_value(WF.ci_coeffs, [H4], WF.ci_coeffs, WF.ci_info))
+                        E1.append(E_prev_adapt - E4[0])
+                        N_Paulis_pool += N_Paulis_H4
+
+                    # H equals either H1 or H4
+                    if N_Paulis_H1 == 0:
+                        E4.append(E_prev_adapt)
+
+                    if N_Paulis_H4 == 0:
+                        E1.append(E_prev_adapt)
+                
+                # Measure both H1 and H4 for next two \thetas
+                else:
+                    E1.append(expectation_value(WF.ci_coeffs, [H1], WF.ci_coeffs, WF.ci_info))
+                    N_Paulis_pool += N_Paulis_H1
+                    E4.append(expectation_value(WF.ci_coeffs, [H4], WF.ci_coeffs, WF.ci_info))
+                    N_Paulis_pool += N_Paulis_H4
+            
+            
+            ## FIND LANDSCAPE MINIMUM
+
+            # Getting landscape coefficients by solving system of equations
+            X1 = np.column_stack([np.ones_like(thetas_samples),
+                                np.sin(thetas_samples), 
+                                1-np.cos(thetas_samples),
+                                ])
+                    
+            A1, B1, C1 = np.linalg.solve(X1, E1)
+
+            X4 = np.column_stack([np.ones_like(thetas_samples),
+                                1/2*np.sin(2*thetas_samples),
+                                1/2*np.sin(thetas_samples)**2,
+                                ])
+                    
+            A4, B4, C4 = np.linalg.solve(X4, E4)
+
+            # Find thetas for min and max energy points by finding zeros of derivative polynomial
+            pol_coeffs = np.array(poly_min(B1, C1, B4, C4))
+
+            # Run np.roots only when pol_coeffs is not array of zeros (crashes otherwise)
+            if pol_coeffs.all() == 0:
+                theta_min_max = [0]
+
+            else:
+                # Removing complex roots
+                roots = np.roots(pol_coeffs)                
+                theta_min_max = 2*np.arctan(roots[np.isclose(roots.imag, 0)].real)
+
+                if np.any(theta_min_max.imag > 1e-12):
+                    raise ValueError('Complex roots encountered')
+            
+            # Calculate min/max energy of total landscape
+            E_min_max = landscape_tot(A1, B1, C1, A4, B4, C4, theta_min_max)      
+
+            #Get energy minimum and corresponding theta
+            E_min = np.min(E_min_max)
+            theta_min = theta_min_max[np.argmin(E_min_max)]
+
+            # Store energy scores and corresponding theta
+            energy_pool.append(E_min)
+            theta_pool.append(theta_min)
+
+        op_index = np.argmin(energy_pool)
+
+        print('OPERATOR->', op_index)
+        print(f'Theta {theta_pool[op_index]} - Energy {energy_pool[op_index]} - previous {E_prev_adapt}')
+    
+        # deltaE_adapt = np.abs(energy_pool[op_index]-E_prev_adapt) # with respect to previous layer
+        deltaE_adapt = np.abs(cas_en-energy_pool[op_index]) # for chemical accuracy threshold
+
+        if deltaE_adapt < adapt_threshold or WF.ups_layout.n_params >= 100:
+            # Updating last layer with data from best operator
+            WF.ups_layout.excitation_indices[-1] = excitation_pool[op_index]
+            WF.ups_layout.excitation_operator_type[-1] = excitation_pool_type[op_index]
+            thetas = WF.thetas
+            thetas[-1] = theta_pool[op_index]
+            WF.thetas = thetas
+
+            # Appending energy and termination
+            en_traj.append(float(energy_pool[op_index]))
+            rdm1_traj.append(WF.rdm1)
+            rdm2_traj.append(WF.rdm2)
+            converged = True
+
+            # Final printout
+            print('----------------------')
+            print(f'FINAL RESULT - Energy: {en_traj[-1]} - #Layers: {WF.ups_layout.n_params}')
+            print('EXCITATION SEQUENCE')
+            for i, (op_idx, op_type) in enumerate(zip(WF.ups_layout.excitation_indices, WF.ups_layout.excitation_operator_type)):
+                print(f'LAYER {i}: {op_idx} | {op_type}')
+
+        else:
+            # Updating last layer with data from best operator
+            WF.ups_layout.excitation_indices[-1] = excitation_pool[op_index]
+            WF.ups_layout.excitation_operator_type[-1] = excitation_pool_type[op_index]
+            thetas = WF.thetas
+            thetas[-1] = theta_pool[op_index]
+            WF.thetas = thetas
+            
+            # Appending energy to trajectory and updating 'previous' energy for next iteration
+            print(f'RESULT at layer {WF.ups_layout.n_params} - Energy: {energy_pool[op_index]} - Previous: {E_prev_adapt} - Delta: {deltaE_adapt} - Theta: {theta_pool[op_index]}')
+            en_traj.append(float(energy_pool[op_index]))
+            rdm1_traj.append(WF.rdm1)
+            rdm2_traj.append(WF.rdm2)            
+            E_prev_adapt = float(energy_pool[op_index])  # with respect to previous layer
+
+    return WF, en_traj, N_Paulis_pool, rdm1_traj, rdm2_traj
 
 def rotosolve(WF, max_epochs = 1000, opt_threshold = 1e-6):
     '''
