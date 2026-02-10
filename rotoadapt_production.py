@@ -59,8 +59,8 @@ if molecule == 'H2O':
     # geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA) 
 
 if molecule == 'LiH':
-    geometry = 'H 0.000000 0.000000 0.000000; Li 1.595000 0.00000 0.000000' #LiH equilibrium
-    # geometry = 'H 0.000000 0.000000 0.000000; Li 3.0000 0.00000 0.000000' #LiH stretched
+    # geometry = 'H 0.000000 0.000000 0.000000; Li 1.595000 0.00000 0.000000' #LiH equilibrium
+    geometry = 'H 0.000000 0.000000 0.000000; Li 3.0000 0.00000 0.000000' #LiH stretched
 
 if molecule == 'BeH2':
     geometry = 'Be 0.000000 0.000000 0.000000; H 1.33376 0.000000 0.000000; H -1.33376 0.000000 0.000000' #BeH2 equilibrium
@@ -149,20 +149,11 @@ WF = WaveFunctionUPS(
     )
 
 #Energy Hamiltonian Fermionic operator
-if eff == True:
-    Hamiltonian = hamiltonian_full_space(
-        WF.h_mo, 
-        WF.g_mo, 
-        WF.num_orbs
-    )
-else:
-    Hamiltonian = hamiltonian_0i_0a(
-    WF.h_mo,
-    WF.g_mo,
-    WF.num_inactive_orbs,
-    WF.num_active_orbs,
+Hamiltonian = hamiltonian_full_space(
+    WF.h_mo, 
+    WF.g_mo, 
+    WF.num_orbs
 )
-
 
 #define mapper
 mapper = JordanWignerMapper()
@@ -231,11 +222,11 @@ if gen == True:
 
     if po == True and oo == False and eff == False:
 
-        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-RS-full-gen.pkl'), 'wb') as f:
-            pickle.dump(output, f)
-
-        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RS-full-gen.pkl'), 'wb') as f:
+        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-RS-full-gen.pkl'), 'wb') as f:
         #     pickle.dump(output, f)
+
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RS-full-gen.pkl'), 'wb') as f:
+            pickle.dump(output, f)
 
     elif po == False and oo == False and eff == False:
 
@@ -263,12 +254,18 @@ if gen == True:
 
     elif po == True and oo == False and eff == True:
 
-        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-RS-eff-full-gen.pkl'), 'wb') as f:
+        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-RS-eff-full-gen.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)
+
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RS-eff-full-gen.pkl'), 'wb') as f:
             pickle.dump(output, f)
 
     elif po == False and oo == False and eff == True:
 
-        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-RS-eff-gen.pkl'), 'wb') as f:
+        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-RS-eff-gen.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)
+
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RS-eff-gen.pkl'), 'wb') as f:
             pickle.dump(output, f)
 
 else:

@@ -39,6 +39,7 @@ def pool_SD(WF, so_ir, generalized, efficient):
     "H fragments": [],
     "N_Paulis_H1": [],
     "N_Paulis_H4": [],
+    "N_Paulis_H0": [],
     }
 
     ## GENERALIZED vs P-H excitation pool -> first layer always P-H since HF is always reference
@@ -79,11 +80,13 @@ def pool_SD(WF, so_ir, generalized, efficient):
 
         for A in pool_data["excitation operator"]:
             
-            H1, H4 = H_split(WF.num_orbs, WF.h_mo, WF.g_mo, A)
+            H1, H4, H0 = H_split(WF.num_orbs, WF.h_mo, WF.g_mo, A)
 
             pool_data["N_Paulis_H1"].append(len(mapper.map(FermionicOp(H1.get_qiskit_form(WF.num_orbs), WF.num_spin_orbs)).paulis))
             pool_data["N_Paulis_H4"].append(len(mapper.map(FermionicOp(H4.get_qiskit_form(WF.num_orbs), WF.num_spin_orbs)).paulis))
-            pool_data["H fragments"].append((H1, H4))
+            pool_data["N_Paulis_H0"].append(len(mapper.map(FermionicOp(H0.get_qiskit_form(WF.num_orbs), WF.num_spin_orbs)).paulis))
+            pool_data["H fragments"].append((H1, H4, H0))
+
 
     return pool_data
 
@@ -106,6 +109,7 @@ def pool_D(WF, so_ir, generalized, efficient):
     "H fragments": [],
     "N_Paulis_H1": [],
     "N_Paulis_H4": [],
+    "N_Paulis_H0": [],
     }
 
     ## GENERALIZED vs P-H excitation pool -> first layer always P-H since HF is always reference
@@ -127,16 +131,19 @@ def pool_D(WF, so_ir, generalized, efficient):
 
     if efficient == True:
 
+        print('SPLITTING HAMILTONIAN....')
+
         #define mapper
         mapper = JordanWignerMapper()
 
         for A in pool_data["excitation operator"]:
             
-            H1, H4 = H_split(WF.num_orbs, WF.h_mo, WF.g_mo, A)
+            H1, H4, H0 = H_split(WF.num_orbs, WF.h_mo, WF.g_mo, A)
 
             pool_data["N_Paulis_H1"].append(len(mapper.map(FermionicOp(H1.get_qiskit_form(WF.num_orbs), WF.num_spin_orbs)).paulis))
             pool_data["N_Paulis_H4"].append(len(mapper.map(FermionicOp(H4.get_qiskit_form(WF.num_orbs), WF.num_spin_orbs)).paulis))
-            pool_data["H fragments"].append((H1, H4))
+            pool_data["N_Paulis_H0"].append(len(mapper.map(FermionicOp(H0.get_qiskit_form(WF.num_orbs), WF.num_spin_orbs)).paulis))
+            pool_data["H fragments"].append((H1, H4, H0))
 
     return pool_data
 
@@ -629,22 +636,25 @@ def Epqrs_s(p: int, q: int, r: int, s: int) -> FermionicOperator:
     return O1, O2, O3, O4
 
 def EvaluateSort(O: FermionicOperator, 
-                  A: FermionicOperator, 
-                  H1: FermionicOperator, 
-                  H4: FermionicOperator, 
-                  intgr: float,
-                  num_part: int):
+                A: FermionicOperator, 
+                H1: FermionicOperator, 
+                H4: FermionicOperator,
+                H0: FermionicOperator, 
+                intgr: float,
+                num_part: int):  
     '''
-    Divides H into \alpha=1 (H1) and \alpha=4 (H4) cases (PRA 111, 042825 (2025))
+    Divides H into \alpha=1 (H1) and \alpha=4 (H4) cases (PRA 111, 042825 (2025)) and \alpha=0
     1. Calculates [O,A] and A[O,A]A
-    2. If A[O,A]A = 0 -> \alpha=1 -> add integr*O to H1
-    3. If A[O,A]A = [O,A] -> \alpha=4 -> add integr*O to H4
+    2. If A[O,A]A = 0 and [O,A] != 0 -> \alpha=1 -> add integr*O to H1
+    3. If A[O,A]A = [O,A] != 0 -> \alpha=4 -> add integr*O to H4
+    4. If A[O,A]A = [O,A] == 0 -> \alpha=0 -> add integr*O to H0
 
     Arguments:
         - O: Fermi string from H
         - A: anti-symmetric generator from pool
-        - H1: H1 from previous iterations
-        - H4: H4 from previous iterations
+        - H1: Fermi strings from \alpha = 1 case
+        - H4: Fermi strings from \alpha = 4 case
+        - H0: Fermi strings from \alpha = 0 case
         - intgr: molecular integral
         - num_part: 1-particle or 2-particle part of H
 
@@ -655,6 +665,7 @@ def EvaluateSort(O: FermionicOperator,
     # commutator [O,A]
     comm = commutator(O, A)
     cc = comm.operator_count
+
     # product commutator A[O,A]A
     pc = (A*comm*A).operator_count
 
@@ -666,8 +677,8 @@ def EvaluateSort(O: FermionicOperator,
     if num_part == 1:
 
         if cc == pc == {}:
-            H1 += intgr * O
-            print('alpha = 1')
+            H0 += intgr * O
+            print('alpha = 0')
 
         if cc == pc != {}:
             H4 += intgr * O
@@ -681,8 +692,8 @@ def EvaluateSort(O: FermionicOperator,
     if num_part == 2:
 
         if cc == pc == {}:
-            H1 += 1/2 * intgr * O
-            print('alpha = 1')
+            H0 += 1/2 * intgr * O
+            print('alpha = 0')
 
         if cc == pc != {}:
             H4 += 1/2 * intgr * O
@@ -692,7 +703,7 @@ def EvaluateSort(O: FermionicOperator,
             H1 += 1/2 * intgr * O
             print('alpha = 1')
 
-    return H1, H4
+    return H1, H4, H0
 
 def H_split(nMO, h_mo, g_mo, A):
     '''
@@ -705,10 +716,11 @@ def H_split(nMO, h_mo, g_mo, A):
         - A: anti-hermitian generator
 
     Returns:
-        - H1, H4: \alpha=1 and \alpha=4 Hamiltonians
+        - H1, H4, H0: \alpha=1, \alpha=4 and \alpha=0 Hamiltonians
     '''
     H1 = FermionicOperator({})
     H4 = FermionicOperator({})
+    H0 = FermionicOperator({})
 
     for p in range(nMO):
         for q in range(nMO):
@@ -719,8 +731,8 @@ def H_split(nMO, h_mo, g_mo, A):
             O1, O2 = Epq_s(p, q)
 
             # Split Fermi strings into H1 or H4 
-            H1, H4 = EvaluateSort(O1, A, H1, H4, h_mo[p, q], 1)
-            H1, H4 = EvaluateSort(O2, A, H1, H4, h_mo[p, q], 1)
+            H1, H4, H0 = EvaluateSort(O1, A, H1, H4, H0, h_mo[p, q], 1)
+            H1, H4, H0 = EvaluateSort(O2, A, H1, H4, H0, h_mo[p, q], 1)
 
             print('---------')
 
@@ -735,12 +747,12 @@ def H_split(nMO, h_mo, g_mo, A):
                     O1, O2, O3, O4 = Epqrs_s(p, q, r, s)
                                 
                     # Split Fermi strings into H1 or H4 
-                    H1, H4 = EvaluateSort(O1, A, H1, H4, g_mo[p, q, r, s], 2)
-                    H1, H4 = EvaluateSort(O2, A, H1, H4, g_mo[p, q, r, s], 2)
-                    H1, H4 = EvaluateSort(O3, A, H1, H4, g_mo[p, q, r, s], 2)
-                    H1, H4 = EvaluateSort(O4, A, H1, H4, g_mo[p, q, r, s], 2)
+                    H1, H4, H0 = EvaluateSort(O1, A, H1, H4, H0, g_mo[p, q, r, s], 2)
+                    H1, H4, H0 = EvaluateSort(O2, A, H1, H4, H0, g_mo[p, q, r, s], 2)
+                    H1, H4, H0 = EvaluateSort(O3, A, H1, H4, H0, g_mo[p, q, r, s], 2)
+                    H1, H4, H0 = EvaluateSort(O4, A, H1, H4, H0, g_mo[p, q, r, s], 2)
 
-    return H1, H4
+    return H1, H4, H0
 
 def landscape1(A, B, C, theta):
     '''
@@ -841,9 +853,12 @@ def rotoselect_efficient_opt(WF, pool_data, cas_en, po, oo, adapt_threshold = 1e
 
         for i in range(len(excitation_pool)):
             
-            H1, H4 = pool_data["H fragments"][i]
+            H1, H4, H0 = pool_data["H fragments"][i]
+
             N_Paulis_H1 = pool_data["N_Paulis_H1"][i]
             N_Paulis_H4 = pool_data["N_Paulis_H4"][i]
+
+            N_Paulis_H0 = pool_data["N_Paulis_H0"][i]
 
             E1 = []
             E4 = []
@@ -860,31 +875,40 @@ def rotoselect_efficient_opt(WF, pool_data, cas_en, po, oo, adapt_threshold = 1e
 
                 # Recycling previous measurement for \theta = 0
                 if theta == 0:
-                    
-                    # H split into H1 and H4 (with #Paulis_H1 !=0 and #Paulis_H4 != 0)
-                    if N_Paulis_H1 < N_Paulis_H4 and N_Paulis_H1 !=0:
+
+                    if N_Paulis_H0 < N_Paulis_H4 and N_Paulis_H1 < N_Paulis_H4:
+
+                        E0 = expectation_value(WF.ci_coeffs, [H0], WF.ci_coeffs, WF.ci_info)
+                        N_Paulis_pool += N_Paulis_H0
                         E1.append(expectation_value(WF.ci_coeffs, [H1], WF.ci_coeffs, WF.ci_info))
-                        E4.append(E_prev_adapt - E1[0])
                         N_Paulis_pool += N_Paulis_H1
+                        E4.append(E_prev_adapt - E1[0] - E0)
 
-                    if N_Paulis_H4 < N_Paulis_H1 and N_Paulis_H1 !=0:
+                    if N_Paulis_H0 < N_Paulis_H1 and N_Paulis_H4 < N_Paulis_H1:
+
+                        E0 = expectation_value(WF.ci_coeffs, [H0], WF.ci_coeffs, WF.ci_info)
+                        N_Paulis_pool += N_Paulis_H0
                         E4.append(expectation_value(WF.ci_coeffs, [H4], WF.ci_coeffs, WF.ci_info))
-                        E1.append(E_prev_adapt - E4[0])
                         N_Paulis_pool += N_Paulis_H4
+                        E1.append(E_prev_adapt - E4[0] - E0)
 
-                    # H equals either H1 or H4
-                    if N_Paulis_H1 == 0:
-                        E4.append(E_prev_adapt)
+                    if N_Paulis_H1 < N_Paulis_H0 and N_Paulis_H4 < N_Paulis_H0:
 
-                    if N_Paulis_H4 == 0:
-                        E1.append(E_prev_adapt)
-                
+                        E1.append(expectation_value(WF.ci_coeffs, [H1], WF.ci_coeffs, WF.ci_info))
+                        N_Paulis_pool += N_Paulis_H1
+                        E4.append(expectation_value(WF.ci_coeffs, [H4], WF.ci_coeffs, WF.ci_info))
+                        N_Paulis_pool += N_Paulis_H4
+                        E0 = E_prev_adapt - E4[0] - E1[0]
+
                 # Measure both H1 and H4 for next two \thetas
                 else:
                     E1.append(expectation_value(WF.ci_coeffs, [H1], WF.ci_coeffs, WF.ci_info))
                     N_Paulis_pool += N_Paulis_H1
                     E4.append(expectation_value(WF.ci_coeffs, [H4], WF.ci_coeffs, WF.ci_info))
                     N_Paulis_pool += N_Paulis_H4
+
+            E1 = np.array(E1) + np.repeat([E0], 3)
+            E4 = np.array(E4)
 
             ## FIND LANDSCAPE MINIMUM
 
@@ -1036,9 +1060,10 @@ def rotoselect_efficient(WF, pool_data, cas_en, po, oo, adapt_threshold = 1e-5):
 
         for i in range(len(excitation_pool)):
             
-            H1, H4 = pool_data["H fragments"][i]
+            H1, H4, H0 = pool_data["H fragments"][i]
             N_Paulis_H1 = pool_data["N_Paulis_H1"][i]
             N_Paulis_H4 = pool_data["N_Paulis_H4"][i]
+            N_Paulis_H0 = pool_data["N_Paulis_H0"][i]
 
             E1 = []
             E4 = []
@@ -1055,33 +1080,41 @@ def rotoselect_efficient(WF, pool_data, cas_en, po, oo, adapt_threshold = 1e-5):
 
                 # Recycling previous measurement for \theta = 0
                 if theta == 0:
-                    
-                    # H split into H1 and H4 (with #Paulis_H1 !=0 and #Paulis_H4 != 0)
-                    if N_Paulis_H1 < N_Paulis_H4 and N_Paulis_H1 !=0:
+
+                    if N_Paulis_H0 < N_Paulis_H4 and N_Paulis_H1 < N_Paulis_H4:
+
+                        E0 = expectation_value(WF.ci_coeffs, [H0], WF.ci_coeffs, WF.ci_info)
+                        N_Paulis_pool += N_Paulis_H0
                         E1.append(expectation_value(WF.ci_coeffs, [H1], WF.ci_coeffs, WF.ci_info))
-                        E4.append(E_prev_adapt - E1[0])
                         N_Paulis_pool += N_Paulis_H1
+                        E4.append(E_prev_adapt - E1[0] - E0)
 
-                    if N_Paulis_H4 < N_Paulis_H1 and N_Paulis_H1 !=0:
+                    if N_Paulis_H0 < N_Paulis_H1 and N_Paulis_H4 < N_Paulis_H1:
+
+                        E0 = expectation_value(WF.ci_coeffs, [H0], WF.ci_coeffs, WF.ci_info)
+                        N_Paulis_pool += N_Paulis_H0
                         E4.append(expectation_value(WF.ci_coeffs, [H4], WF.ci_coeffs, WF.ci_info))
-                        E1.append(E_prev_adapt - E4[0])
                         N_Paulis_pool += N_Paulis_H4
+                        E1.append(E_prev_adapt - E4[0] - E0)
 
-                    # H equals either H1 or H4
-                    if N_Paulis_H1 == 0:
-                        E4.append(E_prev_adapt)
+                    if N_Paulis_H1 < N_Paulis_H0 and N_Paulis_H4 < N_Paulis_H0:
 
-                    if N_Paulis_H4 == 0:
-                        E1.append(E_prev_adapt)
-                
+                        E1.append(expectation_value(WF.ci_coeffs, [H1], WF.ci_coeffs, WF.ci_info))
+                        N_Paulis_pool += N_Paulis_H1
+                        E4.append(expectation_value(WF.ci_coeffs, [H4], WF.ci_coeffs, WF.ci_info))
+                        N_Paulis_pool += N_Paulis_H4
+                        E0 = E_prev_adapt - E4[0] - E1[0]
+
                 # Measure both H1 and H4 for next two \thetas
                 else:
                     E1.append(expectation_value(WF.ci_coeffs, [H1], WF.ci_coeffs, WF.ci_info))
                     N_Paulis_pool += N_Paulis_H1
                     E4.append(expectation_value(WF.ci_coeffs, [H4], WF.ci_coeffs, WF.ci_info))
                     N_Paulis_pool += N_Paulis_H4
-            
-            
+
+            E1 = np.array(E1) + np.repeat([E0], 3)
+            E4 = np.array(E4)
+
             ## FIND LANDSCAPE MINIMUM
 
             # Getting landscape coefficients by solving system of equations
