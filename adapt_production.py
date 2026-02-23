@@ -28,7 +28,7 @@ from rotoadapt_utils import rotosolve
 ## INPUT VARIABLES
 
 # Create parser
-parser = argparse.ArgumentParser(description="rodoadapt script - returns energy opt trajectory, WF object, #measurements")
+parser = argparse.ArgumentParser(description="adapt script - returns energy opt trajectory, WF object, #measurements")
 
 # Add arguments
 parser.add_argument("--mol", type=str, required = True, help="Molecule (H2O, LiH)")
@@ -57,8 +57,8 @@ if molecule == 'H2O':
     # geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA) 
 
 if molecule == 'LiH':
-    # geometry = 'H 0.000000 0.000000 0.000000; Li 1.595000 0.00000 0.000000' #LiH equilibrium
-    geometry = 'H 0.000000 0.000000 0.000000; Li 3.0000 0.00000 0.000000' #LiH stretched
+    geometry = 'H 0.000000 0.000000 0.000000; Li 1.595000 0.00000 0.000000' #LiH equilibrium
+    # geometry = 'H 0.000000 0.000000 0.000000; Li 3.0000 0.00000 0.000000' #LiH stretched
 
 if molecule == 'BeH2':
     geometry = 'Be 0.000000 0.000000 0.000000; H 1.33376 0.000000 0.000000; H -1.33376 0.000000 0.000000' #BeH2 equilibrium
@@ -141,19 +141,11 @@ WF = WaveFunctionUPS(
         include_active_kappa=True,
     )
 
-#Energy Hamiltonian Fermionic operator
-# Hamiltonian = hamiltonian_0i_0a(
-#     WF.h_mo,
-#     WF.g_mo,
-#     WF.num_inactive_orbs,
-#     WF.num_active_orbs,
-# )
-
 Hamiltonian = hamiltonian_full_space(
-    WF.h_mo, 
-    WF.g_mo, 
-    WF.num_orbs
-)
+        WF.h_mo, 
+        WF.g_mo, 
+        WF.num_orbs
+    )
 
 en_traj = [hf_obj.energy_tot()-mol_obj.enuc]
 rdm1_traj = [WF.rdm1]
@@ -180,6 +172,7 @@ for T in pool_data["excitation operator"]:
     comm = commutator(T, Hamiltonian)
     pool_Ncomm_qubit += len(mapper.map(FermionicOp(comm.get_qiskit_form(WF.num_orbs), WF.num_spin_orbs)).paulis)
 
+
 def do_adapt(WF, maxiter, epoch=1e-6):
     '''Run Adapt VQE algorithm
     
@@ -189,20 +182,25 @@ def do_adapt(WF, maxiter, epoch=1e-6):
         orbital_opt: enable orbital optimization
     '''
     
+    Hamiltonian = hamiltonian_full_space(
+        WF.h_mo, 
+        WF.g_mo, 
+        WF.num_orbs
+    )
+
     nloop = 0
 
     # ADAPT ANSATZ + VQE
     for j in range(maxiter):
 
-        # if oo == True:
-        #     print('Orbital optimization - rebuilding the H...')
+        if oo == True:
+            print('Orbital optimization - rebuilding the H...')
 
-        #     Hamiltonian = hamiltonian_0i_0a(
-        #         WF.h_mo,
-        #         WF.g_mo,
-        #         WF.num_inactive_orbs,
-        #         WF.num_active_orbs,
-        #     )
+            Hamiltonian = hamiltonian_full_space(
+                WF.h_mo, 
+                WF.g_mo, 
+                WF.num_orbs
+            )
 
         #Apply operator to state -> obtain new state (list of operators, state, info on CI space, active space params)
         H_ket = propagate_state([Hamiltonian], WF.ci_coeffs, WF.ci_info, WF.thetas, WF.ups_layout)
@@ -262,25 +260,29 @@ def do_adapt(WF, maxiter, epoch=1e-6):
         # VQE optimization
         # from rotoadapt_utils import rotosolve
 
+        # GB-full
         if po == True and oo == False:
-            WF.run_wf_optimization_1step("slsqp", orbital_optimization = False) # full VQE optimization
+            WF.run_wf_optimization_1step("bfgs", orbital_optimization = False) # full VQE optimization
             # WF = rotosolve(WF)
         
+        # oo-GB-full
         if po == True and oo == True:
-            WF.run_wf_optimization_1step("slsqp", orbital_optimization = True) # full VQE optimization
+            WF.run_wf_optimization_1step("bfgs", orbital_optimization = True) # full VQE optimization
 
+        # GB-last
         if po == False and oo == False:
-            WF.run_wf_optimization_1step("slsqp", orbital_optimization = False, opt_last=True) # Optimize only last unitary
+            WF.run_wf_optimization_1step("l-bfgs-b", orbital_optimization = False, opt_last=True) # Optimize only last unitary
 
+        # oo-GB-last
         if po == False and oo == True:
-            WF.run_wf_optimization_1step("slsqp", orbital_optimization = False, opt_last=True) # Optimize only last unitary
+            WF.run_wf_optimization_1step("l-bfgs-b", orbital_optimization = False, opt_last=True) # Optimize only last unitary
             WF.run_orbital_optimization()
 
 
         deltaE_adapt = np.abs(cas_en-WF.energy_elec)
         rdm1_traj.append(WF.rdm1)
 
-        if deltaE_adapt < epoch or WF.ups_layout.n_params >= 100:
+        if deltaE_adapt < epoch or WF.ups_layout.n_params >= 150:
             en_traj.append(WF.energy_elec)
             # Final printout
             print('----------------------')
@@ -351,33 +353,37 @@ output = {'molecule': molecule,
 
 if gen == True:
 
+    # GB-full
     if po == True and oo == False:
 
-        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-GB-full-gen.pkl'), 'wb') as f:
-        #     pickle.dump(output, f)
-
-        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-GB-full-gen.pkl'), 'wb') as f:
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-eq-GB-full-gen.pkl'), 'wb') as f:
             pickle.dump(output, f)
 
+        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-GB-full-gen.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)
+
+    # GB-last
     elif po == False and oo == False:
 
-        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-GB-last-gen.pkl'), 'wb') as f:
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-eq-GB-last-gen.pkl'), 'wb') as f:
             pickle.dump(output, f)
 
         # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-GB-last-gen.pkl'), 'wb') as f:
         #     pickle.dump(output, f)
 
+    # oo-GB-last
     elif po == False and oo == True:
 
-        with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-GB-last-gen.pkl'), 'wb') as f:
+        with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-eq-GB-last-gen.pkl'), 'wb') as f:
             pickle.dump(output, f)
 
         # with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-str-GB-last-gen.pkl'), 'wb') as f:
         #     pickle.dump(output, f)
 
+    # oo-GB-full
     elif po == True and oo == True:
 
-        with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-GB-full-gen.pkl'), 'wb') as f:
+        with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-eq-GB-full-gen.pkl'), 'wb') as f:
             pickle.dump(output, f)
 
         # with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-str-GB-full-gen.pkl'), 'wb') as f:

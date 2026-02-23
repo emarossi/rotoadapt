@@ -59,8 +59,8 @@ if molecule == 'H2O':
     # geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA) 
 
 if molecule == 'LiH':
-    # geometry = 'H 0.000000 0.000000 0.000000; Li 1.595000 0.00000 0.000000' #LiH equilibrium
-    geometry = 'H 0.000000 0.000000 0.000000; Li 3.0000 0.00000 0.000000' #LiH stretched
+    geometry = 'H 0.000000 0.000000 0.000000; Li 1.595000 0.00000 0.000000' #LiH equilibrium
+    # geometry = 'H 0.000000 0.000000 0.000000; Li 3.0000 0.00000 0.000000' #LiH stretched
 
 if molecule == 'BeH2':
     geometry = 'Be 0.000000 0.000000 0.000000; H 1.33376 0.000000 0.000000; H -1.33376 0.000000 0.000000' #BeH2 equilibrium
@@ -176,20 +176,53 @@ if oo == False:
 
 # Add Rotomeasurements
 
-if (po == True or oo == True) and eff == False:
-    WF, en_traj, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect_opt(WF, pool_data, cas_en, po, oo)    # rotoselect + full VQE optimzation
+# RS-full
+if po == True and oo == False and eff == False:
+
+    WF, en_traj, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect_opt(WF, pool_data, cas_en, True, False)    # rotoselect + full VQE optimzation
     
     # Count number of measurements (#layers * 4 * #op_pool * #Pauli_strings_H) + VQE cost
     cost_pool = int((WF.ups_layout.n_params)*4*len(pool_data['excitation indeces'])*NHam_qubit)
 
+# RS
 if po == False and oo == False and eff == False:
-    WF, en_traj, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect(WF, pool_data, cas_en)  # rotoselect - no optimization
 
+    WF, en_traj, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect(WF, pool_data, cas_en)    # rotoselect + full VQE optimzation
+
+    cost_pool = int((WF.ups_layout.n_params)*4*len(pool_data['excitation indeces'])*NHam_qubit)
+
+# oo-RS
+if po == False and oo == True and eff == False:
+
+    WF, en_traj, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect_opt(WF, pool_data, cas_en, False, True)    # rotoselect + full VQE optimzation
+
+    cost_pool = int((WF.ups_layout.n_params)*4*len(pool_data['excitation indeces'])*NHam_qubit)   
+
+# oo-RS-full
+if po == True and oo == True and eff == False:
+
+    WF, en_traj, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect_opt(WF, pool_data, cas_en, True, True)    # rotoselect + full VQE optimzation
+    
+    # Count number of measurements (#layers * 4 * #op_pool * #Pauli_strings_H) + VQE cost
+    cost_pool = int((WF.ups_layout.n_params)*4*len(pool_data['excitation indeces'])*NHam_qubit)
+
+# RSe-full
 if po == True and oo == False and eff == True:
-    WF, en_traj, cost_pool, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect_efficient_opt(WF, pool_data, cas_en, po, oo)    # rotoselect + full VQE optimzation
 
+    WF, en_traj, cost_pool, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect_efficient_opt(WF, pool_data, cas_en, po, oo)
+
+# RSe
 if po == False and oo == False and eff == True:
-    WF, en_traj, cost_pool, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect_efficient(WF, pool_data, cas_en, po, oo)    # rotoselect + full VQE optimzation
+    WF, en_traj, cost_pool, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect_efficient(WF, pool_data, cas_en, po, oo)
+
+# oo-RSe-full
+if po == True and oo == True and eff == True:
+
+    WF, en_traj, cost_pool, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect_efficient_opt(WF, pool_data, cas_en, po, oo)
+
+# oo-RSe
+if po == False and oo == True and eff == True:
+    WF, en_traj, cost_pool, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect_efficient(WF, pool_data, cas_en, po, oo)
 
 cost_VQE = int(WF.num_energy_evals*NHam_qubit)
 
@@ -220,53 +253,77 @@ output = {'molecule': molecule,
 
 if gen == True:
 
+    # RS-full
     if po == True and oo == False and eff == False:
 
-        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-RS-full-gen.pkl'), 'wb') as f:
-        #     pickle.dump(output, f)
-
-        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RS-full-gen.pkl'), 'wb') as f:
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-eq-RS-full-gen.pkl'), 'wb') as f:
             pickle.dump(output, f)
 
+        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RS-full-gen.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)
+
+    # RS
     elif po == False and oo == False and eff == False:
 
-        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-RS-gen.pkl'), 'wb') as f:
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-eq-RS-gen.pkl'), 'wb') as f:
             pickle.dump(output, f)
 
         # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RS-gen.pkl'), 'wb') as f:
         #     pickle.dump(output, f)
 
+    # oo-RS
     elif po == False and oo == True and eff == False:
 
-        with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-RS-gen.pkl'), 'wb') as f:
+        with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-eq-RS-gen.pkl'), 'wb') as f:
             pickle.dump(output, f)
 
         # with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-str-RS-gen.pkl'), 'wb') as f:
         #     pickle.dump(output, f)
 
+    # oo-RS-full
     elif po == True and oo == True and eff == False:
 
-        with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-RS-full-gen.pkl'), 'wb') as f:
+        with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-eq-RS-full-gen.pkl'), 'wb') as f:
             pickle.dump(output, f)
 
         # with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-str-RS-full-gen.pkl'), 'wb') as f:
         #     pickle.dump(output, f)
 
+    # RSe-full
     elif po == True and oo == False and eff == True:
 
-        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-RS-eff-full-gen.pkl'), 'wb') as f:
-        #     pickle.dump(output, f)
-
-        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RS-eff-full-gen.pkl'), 'wb') as f:
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-eq-RSe-full-gen.pkl'), 'wb') as f:
             pickle.dump(output, f)
 
+        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RSe-full-gen.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)
+
+    # RSe
     elif po == False and oo == False and eff == True:
 
-        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-RS-eff-gen.pkl'), 'wb') as f:
+        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-eq-RSe-gen.pkl'), 'wb') as f:
+            pickle.dump(output, f)
+
+        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RSe-gen.pkl'), 'wb') as f:
         #     pickle.dump(output, f)
 
-        with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-RS-eff-gen.pkl'), 'wb') as f:
+    # oo-RSe-full
+    elif po == True and oo == True and eff == True:
+
+        with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-eq-RSe-full-gen.pkl'), 'wb') as f:
             pickle.dump(output, f)
+
+        # with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-str-RSe-full-gen.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)
+
+    # oo-RSe
+    elif po == False and oo == True and eff == True:
+
+        with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-eq-RSe-gen.pkl'), 'wb') as f:
+            pickle.dump(output, f)
+
+        # with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-str-RSe-gen.pkl'), 'wb') as f:
+        #     pickle.dump(output, f)
 
 else:
 

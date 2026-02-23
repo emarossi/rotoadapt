@@ -517,10 +517,10 @@ def rotoselect_opt(WF, pool_data, cas_en, po, oo, adapt_threshold = 1e-5):  # ad
 
             # Running an optimization
             if po == True and oo == True:
-                WF.run_wf_optimization_1step("slsqp", orbital_optimization=True)
+                WF.run_wf_optimization_1step("bfgs", orbital_optimization=True)
 
             if po == True and oo == False:
-                WF.run_wf_optimization_1step("slsqp", orbital_optimization=False)
+                WF.run_wf_optimization_1step("bfgs", orbital_optimization=False)
 
             if po == False and oo == True:
                 WF.run_orbital_optimization()
@@ -532,7 +532,7 @@ def rotoselect_opt(WF, pool_data, cas_en, po, oo, adapt_threshold = 1e-5):  # ad
             deltaE_adapt = np.abs(cas_en-en_traj[-1])            
 
             # Checking convergence to chemical accuracy
-            if deltaE_adapt < adapt_threshold or WF.ups_layout.n_params >= 100:
+            if deltaE_adapt < adapt_threshold or WF.ups_layout.n_params >= 150:
                 rdm1_traj.append(WF.rdm1)
                 rdm2_traj.append(WF.rdm2)
                 converged = True
@@ -990,10 +990,10 @@ def rotoselect_efficient_opt(WF, pool_data, cas_en, po, oo, adapt_threshold = 1e
 
             # Running an optimization
             if po == True and oo == True:
-                WF.run_wf_optimization_1step("slsqp", orbital_optimization=True)
+                WF.run_wf_optimization_1step("bfgs", orbital_optimization=True)
 
             if po == True and oo == False:
-                WF.run_wf_optimization_1step("slsqp", orbital_optimization=False)
+                WF.run_wf_optimization_1step("bfgs", orbital_optimization=False)
 
             if po == False and oo == True:
                 WF.run_orbital_optimization()
