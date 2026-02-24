@@ -54,15 +54,12 @@ results_folder = os.path.join(parent_folder, "rotoadapt_analysis")
 
 if molecule == 'H2O':
     geometry = 'O 0.000000 0.000000 0.000000; H 0.960000 0.000000 0.000000; H -0.240365 0.929422 0.000000' #H2O equilibrium
-    # geometry = 'O 0.000000  0.000000  0.000000; H  1.068895  1.461020  0.000000; H 1.068895  -1.461020  0.000000' #H2O stretched (symmetric - 1.81 AA) 
 
 if molecule == 'LiH':
     geometry = 'H 0.000000 0.000000 0.000000; Li 1.595000 0.00000 0.000000' #LiH equilibrium
-    # geometry = 'H 0.000000 0.000000 0.000000; Li 3.0000 0.00000 0.000000' #LiH stretched
 
 if molecule == 'BeH2':
     geometry = 'Be 0.000000 0.000000 0.000000; H 1.33376 0.000000 0.000000; H -1.33376 0.000000 0.000000' #BeH2 equilibrium
-    # geometry = 'Be 0.000000 0.000000 0.000000; H 1.33376 0.000000 0.000000; H -1.33376 0.000000 0.000000' #BeH2 triangular
 
 if molecule == 'N2':
     geometry = 'N 0.000000 0.000000 0.000000; N 2.0980 0.00000 0.000000' #N2 stretched
@@ -262,20 +259,20 @@ def do_adapt(WF, maxiter, epoch=1e-6):
 
         # GB-full
         if po == True and oo == False:
-            WF.run_wf_optimization_1step("bfgs", orbital_optimization = False) # full VQE optimization
+            WF.run_wf_optimization_1step("slsqp", orbital_optimization = False) # full VQE optimization
             # WF = rotosolve(WF)
         
         # oo-GB-full
         if po == True and oo == True:
-            WF.run_wf_optimization_1step("bfgs", orbital_optimization = True) # full VQE optimization
+            WF.run_wf_optimization_1step("slsqp", orbital_optimization = True) # full VQE optimization
 
         # GB-last
         if po == False and oo == False:
-            WF.run_wf_optimization_1step("l-bfgs-b", orbital_optimization = False, opt_last=True) # Optimize only last unitary
+            WF.run_wf_optimization_1step("slsqp", orbital_optimization = False, opt_last=True) # Optimize only last unitary
 
         # oo-GB-last
         if po == False and oo == True:
-            WF.run_wf_optimization_1step("l-bfgs-b", orbital_optimization = False, opt_last=True) # Optimize only last unitary
+            WF.run_wf_optimization_1step("slsqp", orbital_optimization = False, opt_last=True) # Optimize only last unitary
             WF.run_orbital_optimization()
 
 
@@ -359,17 +356,11 @@ if gen == True:
         with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-eq-GB-full-gen.pkl'), 'wb') as f:
             pickle.dump(output, f)
 
-        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-GB-full-gen.pkl'), 'wb') as f:
-        #     pickle.dump(output, f)
-
     # GB-last
     elif po == False and oo == False:
 
         with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-eq-GB-last-gen.pkl'), 'wb') as f:
             pickle.dump(output, f)
-
-        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-GB-last-gen.pkl'), 'wb') as f:
-        #     pickle.dump(output, f)
 
     # oo-GB-last
     elif po == False and oo == True:
@@ -377,17 +368,11 @@ if gen == True:
         with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-eq-GB-last-gen.pkl'), 'wb') as f:
             pickle.dump(output, f)
 
-        # with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-str-GB-last-gen.pkl'), 'wb') as f:
-        #     pickle.dump(output, f)
-
     # oo-GB-full
     elif po == True and oo == True:
 
         with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-eq-GB-full-gen.pkl'), 'wb') as f:
             pickle.dump(output, f)
-
-        # with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-str-GB-full-gen.pkl'), 'wb') as f:
-        #     pickle.dump(output, f)
 
 else:
 
@@ -396,29 +381,17 @@ else:
         with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-GB-full.pkl'), 'wb') as f:
             pickle.dump(output, f)
 
-        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-GB-full.pkl'), 'wb') as f:
-        #     pickle.dump(output, f)
-
     elif po == False and oo == False:
 
         with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-GB-last.pkl'), 'wb') as f:
             pickle.dump(output, f)
-
-        # with open(os.path.join(results_folder, f'{molecule}-{nEL}_{nMO}-str-GB-last.pkl'), 'wb') as f:
-        #     pickle.dump(output, f)
 
     elif po == False and oo == True:
 
         with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-GB-last.pkl'), 'wb') as f:
             pickle.dump(output, f)
 
-        # with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-str-GB-last.pkl'), 'wb') as f:
-        #     pickle.dump(output, f)
-
     elif po == True and oo == True:
 
         with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-GB-full.pkl'), 'wb') as f:
             pickle.dump(output, f)
-
-        # with open(os.path.join(results_folder, f'oo-{molecule}-{nEL}_{nMO}-str-GB-full.pkl'), 'wb') as f:
-        #     pickle.dump(output, f)
