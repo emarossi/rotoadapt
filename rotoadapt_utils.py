@@ -475,9 +475,6 @@ def rotoselect_opt(WF, pool_data, cas_en, po, oo, adapt_threshold = 1e-5):  # ad
         for i in range(len(excitation_pool)):
             results.append(pool_evaluator(WF, i, pool_data, E_prev_adapt))
 
-        for i, el in enumerate(results):
-            print(f'OP{i}: The results on the pool are {el}')
-
         # results = pool_parallel(WF, H, pool_data, E_prev_adapt)
         theta_pool, energy_pool = zip(*results)
         op_index = np.argmin(energy_pool)
