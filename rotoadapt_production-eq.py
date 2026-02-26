@@ -213,12 +213,11 @@ if po == False and oo == False and eff == True:
 
 # oo-RSe-full
 if po == True and oo == True and eff == True:
-
-    WF, en_traj, cost_pool, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect_efficient_opt(WF, pool_data, cas_en, po, oo)
+    WF, en_traj, cost_pool, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect_efficient_opt_oo(WF, pool_data, cas_en, po, oo)
 
 # oo-RSe
 if po == False and oo == True and eff == True:
-    WF, en_traj, cost_pool, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect_efficient(WF, pool_data, cas_en, po, oo)
+    WF, en_traj, cost_pool, rdm1_traj, rdm2_traj = rotoadapt_utils.rotoselect_efficient_opt_oo(WF, pool_data, cas_en, po, oo)
 
 cost_VQE = int(WF.num_energy_evals*NHam_qubit)
 
