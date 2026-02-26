@@ -1,6 +1,5 @@
 import numpy as np
 from pyscf import gto, scf
-import matplotlib.pyplot as plt
 import argparse
 import os
 import pickle
