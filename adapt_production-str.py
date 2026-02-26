@@ -279,7 +279,7 @@ def do_adapt(WF, maxiter, epoch=1e-6):
         deltaE_adapt = np.abs(cas_en-WF.energy_elec)
         rdm1_traj.append(WF.rdm1)
 
-        if deltaE_adapt < epoch or WF.ups_layout.n_params >= 150:
+        if deltaE_adapt < epoch or WF.ups_layout.n_params >= 100:
             en_traj.append(WF.energy_elec)
             # Final printout
             print('----------------------')
