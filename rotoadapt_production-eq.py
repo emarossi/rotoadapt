@@ -49,8 +49,9 @@ oo = args.oo
 eff = args.eff
 
 # Getting path to current and parent folder
-parent_folder = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
-results_folder = os.path.join(parent_folder, "rotoadapt_analysis")
+# parent_folder = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
+# results_folder = os.path.join(parent_folder, "rotoadapt_analysis")
+results_folder = os.getcwd()
  
 ## DEFINE MOLECULE IN PYSCF
 

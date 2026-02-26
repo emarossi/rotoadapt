@@ -46,9 +46,10 @@ po = args.po
 oo = args.oo
 
 # Getting path to current and parent folder
-parent_folder = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
-results_folder = os.path.join(parent_folder, "rotoadapt_analysis")
- 
+# parent_folder = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
+# results_folder = os.path.join(parent_folder, "rotoadapt_analysis")
+results_folder = os.getcwd()
+
 ## DEFINE MOLECULE IN PYSCF
 
 if molecule == 'H2O':
