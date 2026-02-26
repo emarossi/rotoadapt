@@ -30,7 +30,7 @@ def pool_SD(WF, so_ir, generalized, efficient):
         generalized: generalized pool or not?->Bool
 
     Returns
-        pool_data: pool data with symmetry allowed excitations
+        pool_data: all data characterizing the pool
     '''
     pool_data = {
     "excitation indeces": [],
@@ -92,7 +92,8 @@ def pool_SD(WF, so_ir, generalized, efficient):
 
 def pool_D(WF, so_ir, generalized, efficient):
     '''
-    Defines the excitation pool.
+    Defines the excitation pool of only doubles. Used when orbital optimization is included.
+    Splits H for each generator based on the indexes of the corresponding element of H. 
 
     Arguments
         WF: SlowQuant wave function object
@@ -100,13 +101,22 @@ def pool_D(WF, so_ir, generalized, efficient):
         generalized: generalized pool or not?->Bool
 
     Returns
-        pool_data: pool data with symmetry allowed excitations
+        pool_data: dictionary with
+            -pool info, 
+            -indexes+generator each 1-particle, 2-particle element of H, 
+            -#Paulis H fragment
     '''
     pool_data = {
     "excitation indeces": [],
     "excitation type": [],
     "excitation operator": [],
-    "H fragments": [],
+    "H fragments": {"H1_1p_idx": [],
+                    "H4_1p_idx": [],
+                    "H0_1p_idx": [],
+                    "H1_2p_idx": [],
+                    "H4_2p_idx": [],
+                    "H0_2p_idx": [],
+                    },
     "N_Paulis_H1": [],
     "N_Paulis_H4": [],
     "N_Paulis_H0": [],
@@ -131,19 +141,26 @@ def pool_D(WF, so_ir, generalized, efficient):
 
     if efficient == True:
 
-        print('SPLITTING HAMILTONIAN....')
-
         #define mapper
         mapper = JordanWignerMapper()
 
         for A in pool_data["excitation operator"]:
             
-            H1, H4, H0 = H_split(WF.num_orbs, WF.h_mo, WF.g_mo, A)
+            # Splitting indexes of H into H1, H4, H0 for each generator and appending to list
+            H1_1p_idx, H4_1p_idx, H0_1p_idx, H1_2p_idx, H4_2p_idx, H0_2p_idx = IndexSplitH(WF.num_orbs, WF.h_mo, WF.g_mo, A)
+            pool_data["H fragments"]["H1_1p_idx"].append(H1_1p_idx)
+            pool_data["H fragments"]["H4_1p_idx"].append(H4_1p_idx)
+            pool_data["H fragments"]["H0_1p_idx"].append(H0_1p_idx)
+            pool_data["H fragments"]["H1_2p_idx"].append(H1_2p_idx)
+            pool_data["H fragments"]["H4_2p_idx"].append(H4_2p_idx)
+            pool_data["H fragments"]["H0_2p_idx"].append(H0_2p_idx)
+
+            # Generate H1, H4, H0 for measuring #Paulis strings
+            H1, H4, H0 = oo_SplitH(WF.h_mo, WF.g_mo, H1_1p_idx, H4_1p_idx, H0_1p_idx, H1_2p_idx, H4_2p_idx, H0_2p_idx)
 
             pool_data["N_Paulis_H1"].append(len(mapper.map(FermionicOp(H1.get_qiskit_form(WF.num_orbs), WF.num_spin_orbs)).paulis))
             pool_data["N_Paulis_H4"].append(len(mapper.map(FermionicOp(H4.get_qiskit_form(WF.num_orbs), WF.num_spin_orbs)).paulis))
             pool_data["N_Paulis_H0"].append(len(mapper.map(FermionicOp(H0.get_qiskit_form(WF.num_orbs), WF.num_spin_orbs)).paulis))
-            pool_data["H fragments"].append((H1, H4, H0))
 
     return pool_data
 
@@ -517,10 +534,10 @@ def rotoselect_opt(WF, pool_data, cas_en, po, oo, adapt_threshold = 1e-5):  # ad
 
             # Running an optimization
             if po == True and oo == True:
-                WF.run_wf_optimization_1step("bfgs", orbital_optimization=True)
+                WF.run_wf_optimization_1step("slsqp", orbital_optimization=True)
 
             if po == True and oo == False:
-                WF.run_wf_optimization_1step("bfgs", orbital_optimization=False)
+                WF.run_wf_optimization_1step("slsqp", orbital_optimization=False)
 
             if po == False and oo == True:
                 WF.run_orbital_optimization()
@@ -641,7 +658,7 @@ def EvaluateSort(O: FermionicOperator,
                 H4: FermionicOperator,
                 H0: FermionicOperator, 
                 intgr: float,
-                num_part: int):  
+                num_part: int) -> FermionicOperator:  
     '''
     Divides H into \alpha=1 (H1) and \alpha=4 (H4) cases (PRA 111, 042825 (2025)) and \alpha=0
     1. Calculates [O,A] and A[O,A]A
@@ -753,6 +770,205 @@ def H_split(nMO, h_mo, g_mo, A):
                     H1, H4, H0 = EvaluateSort(O4, A, H1, H4, H0, g_mo[p, q, r, s], 2)
 
     return H1, H4, H0
+
+# Rotoselect efficient - orbital-optimized
+
+def SortFermiString(O: FermionicOperator, 
+                    A: FermionicOperator) -> int:
+    '''
+    Performs classification of Fermi string based on commutator with generator A
+    - [O,A] = A[O,A]A = 0 --> \alpha = 0
+    - [O,A] = A[O,A]A != 0 --> \alpha = 4
+    - [O,A] != A[O,A]A and A[0,A]A = 0 --> \alpha = 1
+
+    Arguments:
+        - O: Fermi string from Hamiltonian
+        - A: Fermi string equivalent to generator
+
+    Returns:
+        - alpha: value of \alpha (int)    
+    '''
+    # commutator [O,A]
+    comm = commutator(O, A)
+    cc = comm.operator_count
+
+    # product commutator A[O,A]A
+    pc = (A*comm*A).operator_count
+
+    print(O.operators_readable, A.operators_readable)
+    print('[O,A]:', commutator(O, A).operators_readable)
+    print('A[O,A]A:', (A*commutator(O, A)*A).operators_readable)
+
+    if cc == pc == {}:
+        print('alpha = 0')
+        alpha = 0
+
+    if cc == pc != {}:
+        print('alpha = 4')
+        alpha = 4
+
+    if pc != cc:
+        print('alpha = 1')
+        alpha = 1        
+
+    return alpha
+
+def IndexSplitH(nMO, h_mo, g_mo, A):
+    '''
+    Divides indexes referring to elements of H into H1, H4, H0
+    
+    Arguments:
+        - nMO: number of molecular orbitals
+        - h_mo: 1-electron integrals, molecular orbitals basis
+        - g_mo: 2-electron integrals, molecular orbitals basis
+        - A: anti-hermitian generator
+
+    Returns:
+        - H1_1p_idx, H4_1p_idx, H0_1p_idx: indeces corresponding to 1-particle parts of H1, H4 and H0.
+        - H1_2p_idx, H4_2p_idx, H0_2p_idx: indeces corresponding to 2-particle parts of H1, H4 and H0.
+    '''
+    H1_1p_idx = []
+    H4_1p_idx = []
+    H0_1p_idx = []
+
+    H1_2p_idx = []
+    H4_2p_idx = []
+    H0_2p_idx = []
+
+    for p in range(nMO):
+        for q in range(nMO):
+            if abs(h_mo[p, q]) < 10**-14:
+                continue
+
+            # Sort Fermi string and append it to indexes of the H integrals
+            O1, O2 = Epq_s(p, q)
+            
+            sort_O1p = SortFermiString(O1, A)
+
+            if sort_O1p == 1:
+                H1_1p_idx.append((p,q,O1))
+
+            if sort_O1p == 4:
+                H4_1p_idx.append((p,q,O1))
+                
+            if sort_O1p == 0:
+                H0_1p_idx.append((p,q,O1))
+
+            sort_O1p = SortFermiString(O2, A)
+
+            if sort_O1p == 1:
+                H1_1p_idx.append((p,q,O2))
+
+            if sort_O1p == 4:
+                H4_1p_idx.append((p,q,O2))
+                
+            if sort_O1p == 0:
+                H0_1p_idx.append((p,q,O2))
+
+            print('---------')
+
+    for p in range(nMO):
+        for q in range(nMO):
+            for r in range(nMO):
+                for s in range(nMO):
+                    if abs(g_mo[p, q, r, s]) < 10**-14:
+                        continue
+
+                    # Sort Fermi string and append it to indexes of the H integrals
+                    O1, O2, O3, O4 = Epqrs_s(p, q, r, s)
+                    
+                    sort_O2p = SortFermiString(O1, A)
+
+                    if sort_O2p == 1:
+                        H1_2p_idx.append((p,q,r,s,O1))
+
+                    if sort_O2p == 4:
+                        H4_2p_idx.append((p,q,r,s,O1))
+                        
+                    if sort_O2p == 0:
+                        H0_2p_idx.append((p,q,r,s,O1))
+
+                    sort_O2p = SortFermiString(O2, A)
+
+                    if sort_O2p == 1:
+                        H1_2p_idx.append((p,q,r,s,O2))
+
+                    if sort_O2p == 4:
+                        H4_2p_idx.append((p,q,r,s,O2))
+                        
+                    if sort_O2p == 0:
+                        H0_2p_idx.append((p,q,r,s,O2))
+
+                    sort_O2p = SortFermiString(O3, A)
+
+                    if sort_O2p == 1:
+                        H1_2p_idx.append((p,q,r,s,O3))
+
+                    if sort_O2p == 4:
+                        H4_2p_idx.append((p,q,r,s,O3))
+                        
+                    if sort_O2p == 0:
+                        H0_2p_idx.append((p,q,r,s,O3))
+
+                    sort_O2p = SortFermiString(O4, A)
+
+                    if sort_O2p == 1:
+                        H1_2p_idx.append((p,q,r,s,O4))
+
+                    if sort_O2p == 4:
+                        H4_2p_idx.append((p,q,r,s,O4))
+                        
+                    if sort_O2p == 0:
+                        H0_2p_idx.append((p,q,r,s,O4))
+
+    return H1_1p_idx, H4_1p_idx, H0_1p_idx, H1_2p_idx, H4_2p_idx, H0_2p_idx
+
+def oo_SplitH(h_mo, 
+              g_mo, 
+              H1_1p_idx, 
+              H4_1p_idx, 
+              H0_1p_idx, 
+              H1_2p_idx, 
+              H4_2p_idx, 
+              H0_2p_idx):
+
+    '''
+    Construct H1, H4, H0 from the Fermi strings and the indexes mapping to elements of H.
+    Allows to update the integrals at each step.
+
+    Arguments:
+        - h_mo: 1-electron integrals, molecular orbitals basis.
+        - g_mo: 2-electron integrals, molecular orbitals basis.
+        - H1_1p_idx, H4_1p_idx, HO_1p_idx: indexes and generator of 1-particle parts of H1, H4 and H0.
+        - H1_2p_idx, H4_2p_idx, HO_2p_idx: indexes and generator of 2-particle parts of H1, H4 and H0.
+
+    Returns:
+        - H1, H4, H0: \alpha=1, \alpha=4 and \alpha=0 Hamiltonians.
+    '''
+    H1 = FermionicOperator({})
+    H4 = FermionicOperator({})
+    H0 = FermionicOperator({})
+
+    for p, q, O in H1_1p_idx:
+        H1 += h_mo[p, q] * O 
+
+    for p, q, O in H4_1p_idx:
+        H4 += h_mo[p, q] * O 
+
+    for p, q, O in H0_1p_idx:
+        H0 += h_mo[p, q] * O 
+
+    for p, q, r, s, O in H1_2p_idx:
+        H1 += 1/2 * g_mo[p, q, r, s] * O 
+
+    for p, q, r, s, O in H4_2p_idx:
+        H4 += 1/2 * g_mo[p, q, r, s] * O 
+
+    for p, q, r, s, O in H0_2p_idx:
+        H0 += 1/2 * g_mo[p, q, r, s] * O 
+
+    return H1, H4, H0
+
 
 def landscape1(A, B, C, theta):
     '''
@@ -990,10 +1206,10 @@ def rotoselect_efficient_opt(WF, pool_data, cas_en, po, oo, adapt_threshold = 1e
 
             # Running an optimization
             if po == True and oo == True:
-                WF.run_wf_optimization_1step("bfgs", orbital_optimization=True)
+                WF.run_wf_optimization_1step("slsqp", orbital_optimization=True)
 
             if po == True and oo == False:
-                WF.run_wf_optimization_1step("bfgs", orbital_optimization=False)
+                WF.run_wf_optimization_1step("slsqp", orbital_optimization=False)
 
             if po == False and oo == True:
                 WF.run_orbital_optimization()
@@ -1201,6 +1417,215 @@ def rotoselect_efficient(WF, pool_data, cas_en, po, oo, adapt_threshold = 1e-5):
             rdm1_traj.append(WF.rdm1)
             rdm2_traj.append(WF.rdm2)            
             E_prev_adapt = float(energy_pool[op_index])  # with respect to previous layer
+
+    return WF, en_traj, N_Paulis_pool, rdm1_traj, rdm2_traj
+
+def rotoselect_efficient_opt_oo(WF, pool_data, cas_en, po, oo, adapt_threshold = 1e-5):  # adapt_threshold for chemical accuracy
+
+    # Defining the excitation pool
+    excitation_pool = pool_data["excitation indeces"]
+    excitation_pool_type = pool_data["excitation type"]
+
+    # Initialize previous energy and energy trajectory (here with HF energy)
+    E_prev_adapt = float(WF.energy_elec)
+    en_traj = [E_prev_adapt]
+    rdm1_traj = [WF.rdm1]
+    rdm2_traj = [WF.rdm2]
+
+    # Initialize thetas sample
+    thetas_samples = np.array([0, np.pi/3, 3*np.pi/2])
+
+    converged = False
+
+    # Initialize the number of measurements over the pool
+    N_Paulis_pool = 0
+
+    while converged == False and WF.ups_layout.n_params <= 100:
+
+        # Load new operator slot in the ansatz
+        WF.ups_layout.n_params += 1
+        WF.ups_layout.excitation_indices.append((0,0))
+        WF.ups_layout.excitation_operator_type.append(" ")
+        WF.ups_layout.grad_param_R[f"p{WF.ups_layout.n_params:09d}"] = 2
+        WF.ups_layout.param_names.append(f"p{WF.ups_layout.n_params:09d}")
+        WF._thetas.append(0.0)
+
+        energy_pool = []
+        theta_pool = []
+
+        for i in range(len(excitation_pool)):
+            
+            H1_1p_idx = pool_data["H fragments"]["H1_1p_idx"][i]
+            H4_1p_idx = pool_data["H fragments"]["H4_1p_idx"][i]
+            H0_1p_idx = pool_data["H fragments"]["H0_1p_idx"][i]
+            H1_2p_idx = pool_data["H fragments"]["H1_2p_idx"][i]
+            H4_2p_idx = pool_data["H fragments"]["H4_2p_idx"][i]
+            H0_2p_idx = pool_data["H fragments"]["H0_2p_idx"][i]
+
+            # Using indexes+Fermi string from H splitting + update integrals to current version
+            H1, H4, H0 = oo_SplitH(WF.h_mo, WF.g_mo, H1_1p_idx, H4_1p_idx, H0_1p_idx, H1_2p_idx, H4_2p_idx, H0_2p_idx)
+
+            N_Paulis_H1 = pool_data["N_Paulis_H1"][i]
+            N_Paulis_H4 = pool_data["N_Paulis_H4"][i]
+            N_Paulis_H0 = pool_data["N_Paulis_H0"][i]
+
+            E1 = []
+            E4 = []
+
+            WF.ups_layout.excitation_indices[-1] = excitation_pool[i]
+            WF.ups_layout.excitation_operator_type[-1] = excitation_pool_type[i]
+
+            # MEASUREMENT - 2 SHOTS + Small part H (either H1 or H4) - 2 shots if either #Paulis_H1 or #Paulis_H4 = 0
+            for theta in thetas_samples:
+
+                thetas = WF.thetas
+                thetas[-1] = theta
+                WF.thetas = thetas
+
+                # Recycling previous measurement for \theta = 0
+                if theta == 0:
+
+                    if N_Paulis_H0 < N_Paulis_H4 and N_Paulis_H1 < N_Paulis_H4:
+
+                        E0 = expectation_value(WF.ci_coeffs, [H0], WF.ci_coeffs, WF.ci_info)
+                        N_Paulis_pool += N_Paulis_H0
+                        E1.append(expectation_value(WF.ci_coeffs, [H1], WF.ci_coeffs, WF.ci_info))
+                        N_Paulis_pool += N_Paulis_H1
+                        E4.append(E_prev_adapt - E1[0] - E0)
+
+                    if N_Paulis_H0 < N_Paulis_H1 and N_Paulis_H4 < N_Paulis_H1:
+
+                        E0 = expectation_value(WF.ci_coeffs, [H0], WF.ci_coeffs, WF.ci_info)
+                        N_Paulis_pool += N_Paulis_H0
+                        E4.append(expectation_value(WF.ci_coeffs, [H4], WF.ci_coeffs, WF.ci_info))
+                        N_Paulis_pool += N_Paulis_H4
+                        E1.append(E_prev_adapt - E4[0] - E0)
+
+                    if N_Paulis_H1 < N_Paulis_H0 and N_Paulis_H4 < N_Paulis_H0:
+
+                        E1.append(expectation_value(WF.ci_coeffs, [H1], WF.ci_coeffs, WF.ci_info))
+                        N_Paulis_pool += N_Paulis_H1
+                        E4.append(expectation_value(WF.ci_coeffs, [H4], WF.ci_coeffs, WF.ci_info))
+                        N_Paulis_pool += N_Paulis_H4
+                        E0 = E_prev_adapt - E4[0] - E1[0]
+
+                # Measure both H1 and H4 for next two \thetas
+                else:
+                    E1.append(expectation_value(WF.ci_coeffs, [H1], WF.ci_coeffs, WF.ci_info))
+                    N_Paulis_pool += N_Paulis_H1
+                    E4.append(expectation_value(WF.ci_coeffs, [H4], WF.ci_coeffs, WF.ci_info))
+                    N_Paulis_pool += N_Paulis_H4
+
+            E1 = np.array(E1) + np.repeat([E0], 3)
+            E4 = np.array(E4)
+
+            ## FIND LANDSCAPE MINIMUM
+
+            # Getting landscape coefficients by solving system of equations
+            X1 = np.column_stack([np.ones_like(thetas_samples),
+                                np.sin(thetas_samples), 
+                                1-np.cos(thetas_samples),
+                                ])
+                    
+            A1, B1, C1 = np.linalg.solve(X1, E1)
+
+            X4 = np.column_stack([np.ones_like(thetas_samples),
+                                1/2*np.sin(2*thetas_samples),
+                                1/2*np.sin(thetas_samples)**2,
+                                ])
+                    
+            A4, B4, C4 = np.linalg.solve(X4, E4)
+
+            # Find thetas for min and max energy points by finding zeros of derivative polynomial
+            pol_coeffs = np.array(poly_min(B1, C1, B4, C4))
+
+            # Run np.roots only when pol_coeffs is not array of zeros (crashes otherwise)
+            if pol_coeffs.all() == 0:
+                theta_min_max = [0]
+
+            else:
+                # Removing complex roots
+                roots = np.roots(pol_coeffs)                
+                theta_min_max = 2*np.arctan(roots[np.isclose(roots.imag, 0)].real)
+
+                if np.any(theta_min_max.imag > 1e-12):
+                    raise ValueError('Complex roots encountered')
+            
+            # Calculate min/max energy of total landscape
+            E_min_max = landscape_tot(A1, B1, C1, A4, B4, C4, theta_min_max)      
+
+            #Get energy minimum and corresponding theta
+            E_min = np.min(E_min_max)
+            theta_min = theta_min_max[np.argmin(E_min_max)]
+
+            # Store energy scores and corresponding theta
+            energy_pool.append(E_min)
+            theta_pool.append(theta_min)
+
+        op_index = np.argmin(energy_pool)
+
+        print('OPERATOR->', op_index)
+        print(f'Theta {theta_pool[op_index]} - Energy {energy_pool[op_index]} - previous {E_prev_adapt}')
+
+        # deltaE_adapt = np.abs(energy_pool[op_index]-E_prev_adapt)  # with respect to previous layer
+        deltaE_adapt = np.abs(cas_en-energy_pool[op_index])  # with respect to full CI
+
+        if deltaE_adapt < adapt_threshold or WF.ups_layout.n_params >= 100:  
+            # Updating last layer with data from best operator
+            WF.ups_layout.excitation_indices[-1] = excitation_pool[op_index]
+            WF.ups_layout.excitation_operator_type[-1] = excitation_pool_type[op_index]
+            thetas = WF.thetas
+            thetas[-1] = theta_pool[op_index]
+            WF.thetas = thetas
+
+            # Appending energy and termination (before full optimization)
+            en_traj.append(float(energy_pool[op_index]))
+            rdm1_traj.append(WF.rdm1)
+            rdm2_traj.append(WF.rdm2)
+            converged = True
+            print('----------------------')
+            print(f'FINAL RESULT - Energy: {en_traj[-1]} - #Layers: {WF.ups_layout.n_params}')
+            print('EXCITATION SEQUENCE')
+            for i, (op_idx, op_type) in enumerate(zip(WF.ups_layout.excitation_indices, WF.ups_layout.excitation_operator_type)):
+                print(f'LAYER {i}: {op_idx} | {op_type}')
+        
+        else:
+            # Updating last layer with data from best operator
+            WF.ups_layout.excitation_indices[-1] = excitation_pool[op_index]
+            WF.ups_layout.excitation_operator_type[-1] = excitation_pool_type[op_index]
+            thetas = WF.thetas
+            thetas[-1] = theta_pool[op_index]
+            WF.thetas = thetas
+
+            # Running an optimization
+            if po == True and oo == True:
+                WF.run_wf_optimization_1step("slsqp", orbital_optimization=True)
+
+            if po == False and oo == True:
+                WF.run_orbital_optimization()
+            
+            # Appending energy to trajectory and updating 'previous' energy for next iteration
+            en_traj.append(WF.energy_elec)
+            deltaE_adapt = np.abs(cas_en-en_traj[-1])            
+
+            # Checking convergence to chemical accuracy
+            if deltaE_adapt < adapt_threshold or WF.ups_layout.n_params >= 100:
+                rdm1_traj.append(WF.rdm1)
+                rdm2_traj.append(WF.rdm2)
+                converged = True
+
+                # Final printout
+                print('----------------------')
+                print(f'FINAL RESULT - Energy: {en_traj[-1]} - #Layers: {WF.ups_layout.n_params}')
+                print('EXCITATION SEQUENCE')
+                for i, (op_idx, op_type) in enumerate(zip(WF.ups_layout.excitation_indices, WF.ups_layout.excitation_operator_type)):
+                    print(f'LAYER {i}: {op_idx} | {op_type}')
+
+            else:
+                rdm1_traj.append(WF.rdm1)
+                rdm2_traj.append(WF.rdm2)
+                print(f'RESULT at layer {WF.ups_layout.n_params} - Energy: {WF.energy_elec} - Previous: {E_prev_adapt} - Delta: {deltaE_adapt} - Theta: {theta_pool[op_index]}')
+                E_prev_adapt = en_traj[-1]
 
     return WF, en_traj, N_Paulis_pool, rdm1_traj, rdm2_traj
 

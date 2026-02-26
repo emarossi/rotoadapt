@@ -262,20 +262,20 @@ def do_adapt(WF, maxiter, epoch=1e-6):
 
         # GB-full
         if po == True and oo == False:
-            WF.run_wf_optimization_1step("bfgs", orbital_optimization = False) # full VQE optimization
+            WF.run_wf_optimization_1step("slsqp", orbital_optimization = False) # full VQE optimization
             # WF = rotosolve(WF)
         
         # oo-GB-full
         if po == True and oo == True:
-            WF.run_wf_optimization_1step("bfgs", orbital_optimization = True) # full VQE optimization
+            WF.run_wf_optimization_1step("slsqp", orbital_optimization = True) # full VQE optimization
 
         # GB-last
         if po == False and oo == False:
-            WF.run_wf_optimization_1step("l-bfgs-b", orbital_optimization = False, opt_last=True) # Optimize only last unitary
+            WF.run_wf_optimization_1step("slsqp", orbital_optimization = False, opt_last=True) # Optimize only last unitary
 
         # oo-GB-last
         if po == False and oo == True:
-            WF.run_wf_optimization_1step("l-bfgs-b", orbital_optimization = False, opt_last=True) # Optimize only last unitary
+            WF.run_wf_optimization_1step("slsqp", orbital_optimization = False, opt_last=True) # Optimize only last unitary
             WF.run_orbital_optimization()
 
 
