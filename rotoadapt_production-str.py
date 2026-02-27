@@ -62,8 +62,7 @@ if molecule == 'LiH':
     geometry = 'H 0.000000 0.000000 0.000000; Li 3.0000 0.00000 0.000000' #LiH stretched
 
 if molecule == 'BeH2':
-    geometry = 'Be 0.000000 0.000000 0.000000; H 1.33376 0.000000 0.000000; H -1.33376 0.000000 0.000000' #BeH2 linear stretch
-
+    geometry = 'Be 0.000000 0.000000 0.000000; H 2.6675 0.000000 0.000000; H -2.6675 0.000000 0.000000' #BeH2 linear stretch
 
 if molecule == 'N2':
     # geometry = 'N 0.000000 0.000000 0.000000; N 1.0980 0.00000 0.000000' #N2 equilibrium
