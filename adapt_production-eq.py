@@ -67,37 +67,6 @@ if molecule == 'N2':
 if molecule == 'H6': #stretched H6
     geometry = "H -7.500000 0.000000 0.000000; H -4.500000 0.000000 0.000000; H -1.500000 0.000000 0.000000; H 1.500000 0.000000 0.000000; H 4.500000 0.000000 0.000000; H 7.500000 0.000000 0.000000"
 
-## BeH2 INSERTION PROBLEM
-# if 'BeH2' in molecule:
-
-#     def Be_ins_coords(x_Be):
-#         '''
-#         Generates coordinates for BeH2 insertion
-#         Be moving along x, H2 moving along z according to:
-#         z_H = -0.46*x_Be+2.54
-        
-#         Arguments
-#             x_Be: x coordinate of the Be atom
-        
-#         Returns
-#             Be_xyz+H2_xyz: string with xyz coordinates of BeH2
-#         '''
-#         if x_Be <= 4:
-#             z_H = -0.46*x_Be+2.54
-#         else:
-#             z_H = 0.7
-        
-#         # Converting into Angstroms
-#         x_Be *= 0.529177
-#         z_H *= 0.529177
-
-#         Be_xyz = f'Be {x_Be:.6f} 0.000000 0.000000; '
-#         H2_xyz = f'H 0.000000 0.000000 {np.abs(z_H):.6f}; H 0.000000 0.000000 -{np.abs(z_H):.6f}'
-
-#         return Be_xyz+H2_xyz
-
-#     geometry = Be_ins_coords(float(molecule.split('-')[1].strip()))
-
 mol_obj = gto.Mole()
 mol_obj.build(atom = geometry, basis = 'sto-3g', symmetry='c2v')
 hf_obj = scf.RHF(mol_obj)
