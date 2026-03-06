@@ -207,67 +207,28 @@ def global_min_search(A, B, C, D, E):
     p0 = 2*E + C
 
     # Determine polynomial degree
-    coeffs_array = np.array([p0, p1, p2, p3, p4])
+    coeffs_array = np.array([p4, p3, p2, p1, p0])
 
-    # Checking if polynomial is not zero -> can happen with generalized excitation ops
-    if not np.all(coeffs_array == 0):
-
-        tol = 1e-6
-
-        def cmat_builder(coeffs):
-            """
-            Build the companion matrix for a normalized polynomial.
-            
-            Arguments
-                coeffs: coeffs of monic polynomial (normalized to leading order) with minus sign (last = 1)
-            
-            Returns
-                C: companion matrix 
-            """
-            deg = len(coeffs) - 1
-            if deg < 1:
-                return None
-            C = np.zeros((deg, deg))
-            C[1:, :-1] = np.eye(deg - 1)
-            C[:, -1] = coeffs[:-1]
-
-            return C
-
-        # Checking the order of the polynomial -> getting corresponding companion matrix
-
-        if np.abs(p4) > np.abs(p3)*tol:
-            Cmat = cmat_builder([-p0/p4, -p1/p4, -p2/p4, -p3/p4, 1])
-            
-        elif np.abs(p3) > np.abs(p2)*tol:
-            Cmat = cmat_builder([-p0/p3, -p1/p3, -p2/p3, 1])
-
-        elif np.abs(p2) > np.abs(p1)*tol:
-            Cmat = cmat_builder([-p0/p2, -p1/p2, 1])
-            
-        else:
-            Cmat = cmat_builder([-p0/p1, 1])
-
-        # Eigenvalues of Cmat are roots of the quartic polynomial = zeroes of derivative function
-        roots = np.linalg.eigvals(Cmat)
-    
-        # Keep only real roots
-        real_roots = roots[np.isreal(roots)].real
-    
-        # Convert x -> theta
-        thetas = 2 * np.arctan(real_roots)
-    
-        # Evaluate energy at candidate points and find global minimum
-        energies = energy_landscape(A, B, C, D, E, thetas)
-        idx_min = np.argmin(energies)
-        theta_min = thetas[idx_min]
-        energy_min = energies[idx_min]
+    # Run np.roots only when pol_coeffs is not array of zeros (crashes otherwise)
+    if coeffs_array.all() == 0:
+        theta_min_max = [0]
 
     else:
-        theta_min = 0
-        energy_min = 0
-    
-    return theta_min, energy_min
+        # Removing complex roots
+        roots = np.roots(coeffs_array)                
+        theta_min_max = 2*np.arctan(roots[np.isclose(roots.imag, 0)].real)
 
+        if np.any(theta_min_max.imag > 1e-12):
+            raise ValueError('Complex roots encountered')
+    
+    # Calculate min/max energy of total landscape
+    E_min_max = energy_landscape(A, B, C, D, E, theta_min_max)      
+
+    #Get energy minimum and corresponding theta
+    E_min = np.min(E_min_max)
+    theta_min = theta_min_max[np.argmin(E_min_max)]
+
+    return theta_min, E_min
 
 def optimizer(thetas, energies):
     '''
