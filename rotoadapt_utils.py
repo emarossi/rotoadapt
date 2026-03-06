@@ -361,9 +361,16 @@ def rotoselect(WF, pool_data, cas_en, adapt_threshold = 1e-5):  # adapt_threshol
         # results = pool_parallel(WF, H, pool_data, E_prev_adapt)
         theta_pool, energy_pool = zip(*results)
 
+        energy_pool = np.trunc(np.array(energy_pool) * 10**10)/(10**10)
+
         op_index = np.argmin(energy_pool)
 
-        print('OPERATOR->', op_index)
+        op_order = np.argsort(energy_pool)[:10]
+
+        np.set_printoptions(precision=20)
+        print('dtype:',np.array(energy_pool).dtype)
+        print(f'OPERATOR ORDER: {op_order} - ENERGIES: {np.array(energy_pool)[op_order]}')
+        print(f'OPERATOR: {op_index} - ENERGY: {energy_pool[op_index]}')
         print(f'Theta {theta_pool[op_index]} - Energy {energy_pool[op_index]} - previous {E_prev_adapt}')
     
         # deltaE_adapt = np.abs(energy_pool[op_index]-E_prev_adapt) # with respect to previous layer
@@ -1332,9 +1339,15 @@ def rotoselect_efficient(WF, pool_data, cas_en, po, oo, adapt_threshold = 1e-5):
             energy_pool.append(E_min)
             theta_pool.append(theta_min)
 
+        # Truncate energy to 10 digits -> removes effect of numerical noise from selection
+        energy_pool = np.trunc(np.array(energy_pool) * 10**10)/(10**10)
         op_index = np.argmin(energy_pool)
 
-        print('OPERATOR->', op_index)
+        op_order = np.argsort(energy_pool)[:10]
+
+        np.set_printoptions(precision=20)
+        print(f'OPERATOR ORDER: {op_order} - ENERGIES: {np.array(energy_pool)[op_order]}')
+        print(f'OPERATOR: {op_index} - ENERGY: {energy_pool[op_index]}')
         print(f'Theta {theta_pool[op_index]} - Energy {energy_pool[op_index]} - previous {E_prev_adapt}')
     
         # deltaE_adapt = np.abs(energy_pool[op_index]-E_prev_adapt) # with respect to previous layer
