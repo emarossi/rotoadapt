@@ -242,9 +242,9 @@ def do_adapt(WF, maxiter, epoch=1e-6):
         max_arg = np.argmax(np.abs(grad))
 
         #Check if gradient is smaller than smallest improvement (epoch)
-        if(np.max(np.abs(grad)) < epoch):
-            nloop = j
-            break
+        # if(np.max(np.abs(grad)) < epoch):
+        #     nloop = j
+        #     break
 
         #Update ansatz with new excitation operator (corresponding to max gradient)
         WF.ups_layout.n_params += 1
