@@ -22,11 +22,5 @@ python adapt_production_eq.py --mol LiH --AS 4 6 --gen --po -oo --eff
 ```
 Here, apart from '--eff' all the flags of the 'rotoadapt_production_*.py' scripts apply.
 </p>
-<h3> Dependendencies </h3>
-Besides the standard python numerical libraries you need
-<ol>
- <li> Slowquant: https://github.com/erikkjellgren/SlowQuant.git ('adapt_tmp' branch) </li>
- <li> PySCF </li>
- <li> argparse, pickle </li>
-  <li> multiprocessing </li>
-</ol>
+<h3> Dependencies </h3>
+The python packages required are enlisted in 'python_env_requirements.txt'. The code requires the installation of a local branch of Slowquant (https://github.com/erikkjellgren/SlowQuant.git). Please, <a href="mailto:manuross95@gmail.com">contact me</a> for more info.
