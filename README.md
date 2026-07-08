@@ -1,21 +1,32 @@
-<h1> ADAPT project </h1>
+<h1> Efficient Rotoselect algorithm </h1>
 <p>
-Algorithms implementing energy-based (Rotoselect) and gradient-based strategies to select generators in an ADAPT-VQE algorithm.<br>
-The Rotoselect algorithm is based on the ExcitationSolve algorithm -> https://arxiv.org/abs/2409.05939<br>
-The Gradient-based ADAPT is implemented - based on the work of Anurag Singh (https://github.com/darkcoordinate/SlowQuant/blob/master/slowquant/unitary_coupled_cluster/sa_adapt_wavefunction.py#L281) - according to the original ADAPT-VQE paper -> https://doi.org/10.1038/s41467-019-10988-2<br> 
+Implementation of the efficient Rotoselect algorithm described in https://arxiv.org/abs/2606.04786.<br> 
+A calculation can be lauched via the 'rotoadapt_production_*.py' scripts (where *_eq.py script considers equilibrium geometries, while *_str.py the stretched geometries). For example, a Rotoselect efficient equilibrium geometry calculation can be run via:
+ 
+```
+python rotoadapt_production_eq.py --mol LiH --AS 4 6 --gen --po -oo --eff
+```
+The flags can be selected according to:
+<ul>
+  <li> --mol: molecular system (LiH, H2O, BeH2) </li>
+  <li> --AS: active space (nEL, nMO) </li>
+  <li> --gen: (if specified) use generalized excitation operators </li>
+  <li> --po: (if specified) ansatz parameter optimization </li>
+  <li> --oo: (if specified) orbital optimization </li>
+  <li> --eff: run efficient Rotoselect algorithm, if specified; if not, run ExcitationSolve algorithm (https://doi.org/10.1038/s42005-025-02375-9) </li>
+</ul>
+The fermionic ADAPT-VQE algorithm (https://doi.org/10.1038/s41467-019-10988-2) can be run via the 'adapt_production_*.py' scripts via:
+ 
+```
+python adapt_production_eq.py --mol LiH --AS 4 6 --gen --po -oo --eff
+```
+Here, apart from '--eff' all the flags of the 'rotoadapt_production_*.py' scripts apply.
 </p>
 <h3> Dependendencies </h3>
 Besides the standard python numerical libraries you need
 <ol>
- <li> Slowquant: https://github.com/erikkjellgren/SlowQuant.git </li>
+ <li> Slowquant: https://github.com/erikkjellgren/SlowQuant.git ('adapt_tmp' branch) </li>
  <li> PySCF </li>
  <li> argparse, pickle </li>
   <li> multiprocessing </li>
 </ol>
-<h3> How to launch a calculation </h3>
-Call the '*_production.py' as in the example to calculate LiH, (4,4) active space with rotoselect use
-
-```
-python rotoadapt_production.py --mol --AS 4 4
-```
-Call the option --help to visualize available options. Only --mol and --AS need be specified for chemical accuracy calculations.
