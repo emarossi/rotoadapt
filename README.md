@@ -11,8 +11,8 @@ The flags can be selected according to:
   <li> --mol: molecular system (LiH, H2O, BeH2) </li>
   <li> --AS: active space (nEL, nMO) </li>
   <li> --gen: (if specified) use generalized excitation operators </li>
-  <li> --po: (if specified) ansatz parameter optimization </li>
-  <li> --oo: (if specified) orbital optimization </li>
+  <li> --po: enable 'full' parameter optimization ('last' if not specified) </li>
+  <li> --oo: enable orbital optimization </li>
   <li> --eff: run efficient Rotoselect algorithm, if specified; if not, run ExcitationSolve algorithm (https://doi.org/10.1038/s42005-025-02375-9) </li>
 </ul>
 The fermionic ADAPT-VQE algorithm (https://doi.org/10.1038/s41467-019-10988-2) can be run via the 'adapt_production_*.py' scripts via:
