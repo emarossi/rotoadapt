@@ -204,7 +204,7 @@ output = {'molecule': molecule,
           'ref_data': {'elec_en_ref': cas_obj.e_tot-mol_obj.enuc,
                        'nuc_en_ref': mol_obj.enuc,
                        'rdm1_ref': cas_rdm1,
-                       }, # CASCI reference data
+                       },
           'en_traj': np.array(en_traj), # array of electronic energie shape=(#layers)
           'rdm1_traj': rdm1_traj, # rdm1 over the whole trajectory WF object
           'rdm2_traj': rdm2_traj, # rdm1 over the whole trajectory WF object
@@ -217,6 +217,7 @@ output = {'molecule': molecule,
                           'excitation_op_type': WF.ups_layout.excitation_operator_type,
                           'thetas': WF.thetas,
                           },
+           'pool_data': pool_data,
           }
 
 if gen == True:
